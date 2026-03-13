@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate RoadTo660 Icons</title></head>
+<body style="background:#222;color:#fff;font-family:sans-serif;padding:2rem">
+<h2>RoadTo660 Icon Generator</h2>
+<p>Haz clic en cada boton para descargar el icono PNG. Luego muevelos a <code>public/</code>.</p>
+<canvas id="c192" width="192" height="192" style="border:1px solid #444;margin:8px"></canvas>
+<canvas id="c512" width="512" height="512" style="border:1px solid #444;margin:8px"></canvas>
+<br>
+<button onclick="download(192)">Descargar icon-192.png</button>
+<button onclick="download(512)">Descargar icon-512.png</button>
+<script>
+function draw(size) {
+  const c = document.getElementById('c' + size);
+  const ctx = c.getContext('2d');
+  const s = size;
+  // Background
+  ctx.fillStyle = '#0f1117';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, s, s, s * 0.1875);
+  ctx.fill();
+  // Border glow
+  ctx.strokeStyle = 'rgba(167,139,250,0.2)';
+  ctx.lineWidth = s * 0.004;
+  ctx.beginPath();
+  ctx.roundRect(s*0.03, s*0.03, s*0.94, s*0.94, s*0.156);
+  ctx.stroke();
+  // "ROAD TO" text
+  ctx.fillStyle = '#6b7280';
+  ctx.font = `600 ${s*0.11}px system-ui,-apple-system,sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = `${s*0.015}px`;
+  ctx.fillText('ROAD TO', s/2, s*0.38);
+  // "660" text
+  ctx.fillStyle = '#a78bfa';
+  ctx.font = `900 ${s*0.35}px system-ui,-apple-system,sans-serif`;
+  ctx.letterSpacing = '0px';
+  ctx.fillText('660', s/2, s*0.72);
+  // Underline
+  ctx.strokeStyle = 'rgba(167,139,250,0.3)';
+  ctx.lineWidth = s*0.006;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(s*0.2, s*0.78);
+  ctx.lineTo(s*0.8, s*0.78);
+  ctx.stroke();
+}
+draw(192);
+draw(512);
+function download(size) {
+  const c = document.getElementById('c' + size);
+  const a = document.createElement('a');
+  a.download = 'icon-' + size + '.png';
+  a.href = c.toDataURL('image/png');
+  a.click();
+}
+</script>
+</body>
+</html>

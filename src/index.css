@@ -1,0 +1,167 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body {
+  background-color: #0f1117;
+  color: #ffffff;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.5);
+}
+
+select option {
+  background-color: #181b23;
+  color: #ffffff;
+}
+
+/* ─── Card glow on hover ────────────────────────────────── */
+.card-glow {
+  position: relative;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-glow:hover {
+  border-color: rgba(167, 139, 250, 0.15);
+  box-shadow:
+    0 0 20px -5px rgba(167, 139, 250, 0.08),
+    0 0 60px -15px rgba(167, 139, 250, 0.04);
+}
+
+.card-glow-green:hover {
+  border-color: rgba(52, 211, 153, 0.15);
+  box-shadow:
+    0 0 20px -5px rgba(52, 211, 153, 0.08),
+    0 0 60px -15px rgba(52, 211, 153, 0.04);
+}
+
+.card-glow-red:hover {
+  border-color: rgba(248, 113, 113, 0.15);
+  box-shadow:
+    0 0 20px -5px rgba(248, 113, 113, 0.08),
+    0 0 60px -15px rgba(248, 113, 113, 0.04);
+}
+
+.card-glow-amber:hover {
+  border-color: rgba(251, 191, 36, 0.15);
+  box-shadow:
+    0 0 20px -5px rgba(251, 191, 36, 0.08),
+    0 0 60px -15px rgba(251, 191, 36, 0.04);
+}
+
+.card-glow-cyan:hover {
+  border-color: rgba(34, 211, 238, 0.15);
+  box-shadow:
+    0 0 20px -5px rgba(34, 211, 238, 0.08),
+    0 0 60px -15px rgba(34, 211, 238, 0.04);
+}
+
+/* ─── Progress bar shimmer ──────────────────────────────── */
+.progress-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.15),
+    transparent
+  );
+  animation: shimmerSlide 3s ease-in-out infinite;
+}
+
+@keyframes shimmerSlide {
+  0%   { transform: translateX(-200%); }
+  50%  { transform: translateX(300%); }
+  100% { transform: translateX(300%); }
+}
+
+/* ─── Pulse ring for active timeline nodes ──────────────── */
+.pulse-ring {
+  animation: pulseRing 2s ease-in-out infinite;
+}
+
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0 currentColor; }
+  50%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ─── Gradient text animation ───────────────────────────── */
+.gradient-text-animate {
+  background-size: 200% auto;
+  animation: gradientShift 3s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% center; }
+  50%  { background-position: 100% center; }
+  100% { background-position: 0% center; }
+}
+
+/* ─── Subtle float for hero elements ────────────────────── */
+.float-subtle {
+  animation: floatSubtle 4s ease-in-out infinite;
+}
+
+@keyframes floatSubtle {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* ─── Nav active indicator ──────────────────────────────── */
+.nav-indicator {
+  position: relative;
+}
+
+.nav-indicator::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 0;
+  border-radius: 2px;
+  background: #a78bfa;
+  transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nav-indicator.active::before {
+  height: 60%;
+}
