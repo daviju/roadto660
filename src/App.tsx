@@ -9,6 +9,8 @@ import { Timeline } from './components/timeline/Timeline';
 import { Charts } from './components/charts/Charts';
 import { Settings } from './components/settings/Settings';
 import { Motorcycles } from './components/motorcycles/Motorcycles';
+import { Movements } from './components/movements/Movements';
+import { Advice } from './components/advice/Advice';
 import { LoadingScreen } from './components/LoadingScreen';
 import { useStore } from './store/useStore';
 import { initializeSync } from './firebase/sync';
@@ -19,24 +21,17 @@ function PageRouter() {
 
   const getPage = () => {
     switch (currentPage) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'expenses':
-        return <Expenses />;
-      case 'income':
-        return <Income />;
-      case 'budget':
-        return <Budget />;
-      case 'timeline':
-        return <Timeline />;
-      case 'charts':
-        return <Charts />;
-      case 'motorcycles':
-        return <Motorcycles />;
-      case 'settings':
-        return <Settings />;
-      default:
-        return <Dashboard />;
+      case 'dashboard': return <Dashboard />;
+      case 'movements': return <Movements />;
+      case 'expenses': return <Expenses />;
+      case 'income': return <Income />;
+      case 'budget': return <Budget />;
+      case 'timeline': return <Timeline />;
+      case 'charts': return <Charts />;
+      case 'motorcycles': return <Motorcycles />;
+      case 'advice': return <Advice />;
+      case 'settings': return <Settings />;
+      default: return <Dashboard />;
     }
   };
 
@@ -57,6 +52,18 @@ function PageRouter() {
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const theme = useStore((s) => s.settings.theme);
+
+  // Apply theme class whenever it changes
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.classList.toggle('light', !prefersDark);
+    } else {
+      root.classList.toggle('light', theme === 'light');
+    }
+  }, [theme]);
 
   useEffect(() => {
     initializeSync().then(() => setReady(true));

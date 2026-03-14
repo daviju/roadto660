@@ -25,12 +25,14 @@ interface AppState {
   // Expenses
   expenses: Expense[];
   addExpense: (expense: Omit<Expense, 'id'>) => void;
+  addExpenses: (expenses: (Omit<Expense, 'id'> & { id?: string })[]) => void;
   updateExpense: (id: string, expense: Partial<Expense>) => void;
   deleteExpense: (id: string) => void;
 
   // Income
   incomes: Income[];
   addIncome: (income: Omit<Income, 'id'>) => void;
+  addIncomes: (incomes: (Omit<Income, 'id'> & { id?: string })[]) => void;
   updateIncome: (id: string, income: Partial<Income>) => void;
   deleteIncome: (id: string) => void;
 
@@ -79,11 +81,18 @@ export const useStore = create<AppState>()(
       updateSettings: (updates) =>
         set((s) => ({ settings: { ...s.settings, ...updates } })),
 
-      // Expenses — pre-seeded with real data
+      // Expenses
       expenses: SEED_EXPENSES,
       addExpense: (expense) =>
         set((s) => ({
           expenses: [{ ...expense, id: generateId() }, ...s.expenses],
+        })),
+      addExpenses: (newExpenses) =>
+        set((s) => ({
+          expenses: [
+            ...newExpenses.map((e) => ({ ...e, id: e.id || generateId() } as Expense)),
+            ...s.expenses,
+          ],
         })),
       updateExpense: (id, updates) =>
         set((s) => ({
@@ -92,11 +101,18 @@ export const useStore = create<AppState>()(
       deleteExpense: (id) =>
         set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) })),
 
-      // Income — pre-seeded with real data
+      // Income
       incomes: SEED_INCOMES,
       addIncome: (income) =>
         set((s) => ({
           incomes: [{ ...income, id: generateId() }, ...s.incomes],
+        })),
+      addIncomes: (newIncomes) =>
+        set((s) => ({
+          incomes: [
+            ...newIncomes.map((i) => ({ ...i, id: i.id || generateId() } as Income)),
+            ...s.incomes,
+          ],
         })),
       updateIncome: (id, updates) =>
         set((s) => ({
@@ -222,7 +238,6 @@ export const useStore = create<AppState>()(
             m.id === id ? { ...m, ...updates } : m
           );
           const updatedMoto = newMotos.find((m) => m.id === id);
-          // If updated moto is active, also update Phase 4
           if (updatedMoto?.active) {
             return {
               motorcycles: newMotos,

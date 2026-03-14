@@ -69,6 +69,7 @@ function normalizeFirebaseData(data: Record<string, unknown>) {
         : fallback.incomeConcepts,
     payDay: (s.payDay as number) ?? fallback.payDay,
     cycleMode: (s.cycleMode as AppSettings['cycleMode']) ?? fallback.cycleMode,
+    theme: (s.theme as AppSettings['theme']) ?? fallback.theme,
   };
 
   return {

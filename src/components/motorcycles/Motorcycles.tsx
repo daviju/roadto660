@@ -24,7 +24,6 @@ export function Motorcycles() {
   const [editId, setEditId] = useState<string | null>(null);
   const [showCompare, setShowCompare] = useState(false);
 
-  // Form state
   const [form, setForm] = useState({
     name: '', price: '', priceMin: '', priceMax: '',
     insuranceYear: '', type: 'Sport', notes: '',
@@ -38,7 +37,6 @@ export function Motorcycles() {
   const available = getAvailableBalance(settings.currentBalance, settings.emergencyFund);
   const totalPaid = getTotalPaid(phases);
 
-  // Fixed costs (phases 1-3)
   const fixedCost = phases
     .filter(p => p.id !== 'phase-4')
     .reduce((s, p) => s + getPhaseTotal(p), 0);
@@ -49,6 +47,7 @@ export function Motorcycles() {
 
   const startEdit = (moto: Motorcycle) => {
     setEditId(moto.id);
+    setShowAdd(false);
     setForm({
       name: moto.name,
       price: moto.price.toString(),
@@ -70,146 +69,134 @@ export function Motorcycles() {
       insuranceYear: parseFloat(form.insuranceYear) || 0,
       type: form.type,
       notes: form.notes,
-      active: false,
     };
     if (!data.name || data.price <= 0) return;
 
     if (editId) {
-      updateMotorcycle(editId, data);
+      // Preserve active state when editing
+      const existing = motorcycles.find(m => m.id === editId);
+      updateMotorcycle(editId, { ...data, active: existing?.active ?? false });
       setEditId(null);
     } else {
-      addMotorcycle(data);
+      addMotorcycle({ ...data, active: false });
       setShowAdd(false);
     }
     resetForm();
   };
 
-  // Cheapest moto for comparison
-  const cheapestTotal = Math.min(...motorcycles.map(m => fixedCost + m.price + m.insuranceYear));
+  const cheapestTotal = motorcycles.length > 0
+    ? Math.min(...motorcycles.map(m => fixedCost + m.price + m.insuranceYear))
+    : 0;
 
   return (
-    <motion.div
-      className="space-y-6"
-      variants={staggerContainer}
-      initial="initial"
-      animate="animate"
-    >
-      <motion.div variants={fadeUp} className="flex items-center justify-between">
+    <motion.div className="space-y-6" variants={staggerContainer} initial="initial" animate="animate">
+      <motion.div variants={fadeUp} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-white">Comparador de motos</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Selecciona tu moto y todo se recalcula automaticamente
-          </p>
+          <h2 className="text-2xl font-bold text-th-text">Comparador de motos</h2>
+          <p className="text-sm text-th-muted mt-1">Selecciona tu moto y todo se recalcula</p>
         </div>
         <div className="flex gap-2">
           <motion.button
             onClick={() => setShowCompare(!showCompare)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-accent-cyan/15 text-accent-cyan rounded-xl text-sm font-medium hover:bg-accent-cyan/25 transition-colors"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-accent-cyan/15 text-accent-cyan rounded-xl text-xs sm:text-sm font-medium hover:bg-accent-cyan/25 transition-colors"
+            whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+            aria-label="Vista comparativa"
           >
-            Vista comparativa
+            <span className="hidden sm:inline">Vista comparativa</span>
+            <span className="sm:hidden">Comparar</span>
           </motion.button>
           <motion.button
             onClick={() => { setShowAdd(!showAdd); setEditId(null); resetForm(); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-accent-purple/15 text-accent-purple rounded-xl text-sm font-medium hover:bg-accent-purple/25 transition-colors"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-accent-purple/15 text-accent-purple rounded-xl text-xs sm:text-sm font-medium hover:bg-accent-purple/25 transition-colors"
+            whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+            aria-label="Nueva moto"
           >
-            <motion.div animate={{ rotate: showAdd ? 45 : 0 }}><Plus size={16} /></motion.div>
-            Nueva moto
+            <motion.div animate={{ rotate: showAdd ? 45 : 0 }} transition={{ duration: 0.2 }}><Plus size={16} aria-hidden="true" /></motion.div>
+            <span className="hidden sm:inline">Nueva moto</span>
           </motion.button>
         </div>
       </motion.div>
 
-      {/* Active moto highlight */}
       {activeMoto && (
-        <motion.div
-          variants={fadeUp}
-          className="bg-gradient-to-r from-accent-purple/10 to-transparent rounded-xl p-5 border border-accent-purple/20"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <motion.div variants={fadeUp} className="bg-gradient-to-r from-accent-purple/10 to-transparent rounded-xl p-4 md:p-5 border border-accent-purple/20">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <motion.div
-                className="w-10 h-10 rounded-xl bg-accent-purple/20 flex items-center justify-center"
+                className="w-10 h-10 rounded-xl bg-accent-purple/20 flex items-center justify-center flex-shrink-0"
                 animate={{ rotate: [0, 5, -5, 0] }}
                 transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
               >
-                <Bike size={20} className="text-accent-purple" />
+                <Bike size={20} className="text-accent-purple" aria-hidden="true" />
               </motion.div>
-              <div>
-                <p className="text-sm font-semibold text-white">{activeMoto.name}</p>
-                <p className="text-xs text-gray-500">{activeMoto.type} - Moto activa</p>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-th-text truncate">{activeMoto.name}</p>
+                <p className="text-xs text-th-muted">{activeMoto.type} - Moto activa</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="font-mono text-xl font-bold text-accent-purple">{formatCurrency(activeMoto.price)}</p>
-              <p className="text-xs text-gray-500">Seguro: {formatCurrency(activeMoto.insuranceYear)}/ano</p>
+            <div className="text-right flex-shrink-0">
+              <p className="font-mono text-lg md:text-xl font-bold text-accent-purple">{formatCurrency(activeMoto.price)}</p>
+              <p className="text-xs text-th-muted">Seguro: {formatCurrency(activeMoto.insuranceYear)}/ano</p>
             </div>
           </div>
         </motion.div>
       )}
 
-      {/* Add/Edit Form */}
       <AnimatePresence>
         {(showAdd || editId) && (
           <motion.form
             onSubmit={handleSubmit}
-            className="bg-surface rounded-xl p-5 border border-white/5 space-y-4 overflow-hidden"
-            variants={collapseVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
+            className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border space-y-4 overflow-hidden"
+            variants={collapseVariants} initial="initial" animate="animate" exit="exit"
           >
-            <h3 className="text-sm font-semibold text-white">
+            <h3 className="text-sm font-semibold text-th-text">
               {editId ? 'Editar moto' : 'Anadir nueva moto'}
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="lg:col-span-2">
-                <label className="block text-xs text-gray-500 mb-1.5">Nombre</label>
-                <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+              <div className="col-span-2">
+                <label htmlFor="moto-name" className="block text-xs text-th-muted mb-1.5">Nombre</label>
+                <input id="moto-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                   placeholder="Ej: Honda CBR650R"
-                  className="w-full bg-surface-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-accent-purple focus:outline-none transition-colors" />
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Precio</label>
-                <input type="number" step="1" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}
-                  className="w-full bg-surface-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-accent-purple focus:outline-none transition-colors" />
+                <label htmlFor="moto-price" className="block text-xs text-th-muted mb-1.5">Precio</label>
+                <input id="moto-price" type="number" step="1" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none transition-colors" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Seguro anual</label>
-                <input type="number" step="1" value={form.insuranceYear} onChange={e => setForm({ ...form, insuranceYear: e.target.value })}
-                  className="w-full bg-surface-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-accent-purple focus:outline-none transition-colors" />
+                <label htmlFor="moto-insurance" className="block text-xs text-th-muted mb-1.5">Seguro anual</label>
+                <input id="moto-insurance" type="number" step="1" value={form.insuranceYear} onChange={e => setForm({ ...form, insuranceYear: e.target.value })}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none transition-colors" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Precio min</label>
-                <input type="number" step="1" value={form.priceMin} onChange={e => setForm({ ...form, priceMin: e.target.value })}
-                  className="w-full bg-surface-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-accent-purple focus:outline-none transition-colors" />
+                <label htmlFor="moto-min" className="block text-xs text-th-muted mb-1.5">Precio min</label>
+                <input id="moto-min" type="number" step="1" value={form.priceMin} onChange={e => setForm({ ...form, priceMin: e.target.value })}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none transition-colors" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Precio max</label>
-                <input type="number" step="1" value={form.priceMax} onChange={e => setForm({ ...form, priceMax: e.target.value })}
-                  className="w-full bg-surface-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-accent-purple focus:outline-none transition-colors" />
+                <label htmlFor="moto-max" className="block text-xs text-th-muted mb-1.5">Precio max</label>
+                <input id="moto-max" type="number" step="1" value={form.priceMax} onChange={e => setForm({ ...form, priceMax: e.target.value })}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none transition-colors" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Tipo</label>
-                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
-                  className="w-full bg-surface-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-accent-purple focus:outline-none transition-colors">
+                <label htmlFor="moto-type" className="block text-xs text-th-muted mb-1.5">Tipo</label>
+                <select id="moto-type" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors">
                   <option value="Sport">Sport</option>
                   <option value="Sport-touring">Sport-touring</option>
                   <option value="Naked">Naked</option>
                   <option value="Adventure">Adventure</option>
                 </select>
               </div>
-              <div className="lg:col-span-4">
-                <label className="block text-xs text-gray-500 mb-1.5">Notas</label>
-                <input type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-                  className="w-full bg-surface-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-accent-purple focus:outline-none transition-colors" />
+              <div className="col-span-2 lg:col-span-4">
+                <label htmlFor="moto-notes" className="block text-xs text-th-muted mb-1.5">Notas</label>
+                <input id="moto-notes" type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors" />
               </div>
             </div>
             <div className="flex gap-2 justify-end">
               <motion.button type="button" onClick={() => { setShowAdd(false); setEditId(null); resetForm(); }}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors" whileTap={{ scale: 0.95 }}>
+                className="px-4 py-2 text-sm text-th-secondary hover:text-th-text transition-colors" whileTap={{ scale: 0.95 }}>
                 Cancelar
               </motion.button>
               <motion.button type="submit"
@@ -222,26 +209,22 @@ export function Motorcycles() {
         )}
       </AnimatePresence>
 
-      {/* Comparison Table */}
       <AnimatePresence>
         {showCompare && (
           <motion.div
-            className="bg-surface rounded-xl border border-white/5 overflow-x-auto"
-            variants={collapseVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
+            className="bg-th-card rounded-xl border border-th-border overflow-x-auto"
+            variants={collapseVariants} initial="initial" animate="animate" exit="exit"
           >
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[600px]">
               <thead>
-                <tr className="border-b border-white/5">
-                  <th className="text-left p-4 text-xs text-gray-500 font-medium">Moto</th>
-                  <th className="text-right p-4 text-xs text-gray-500 font-medium">Precio</th>
-                  <th className="text-right p-4 text-xs text-gray-500 font-medium">Seguro/ano</th>
-                  <th className="text-right p-4 text-xs text-gray-500 font-medium">Seguro/mes</th>
-                  <th className="text-right p-4 text-xs text-gray-500 font-medium">Coste total plan</th>
-                  <th className="text-right p-4 text-xs text-gray-500 font-medium">Fecha estimada</th>
-                  <th className="text-right p-4 text-xs text-gray-500 font-medium">vs mas barata</th>
+                <tr className="border-b border-th-border">
+                  <th className="text-left p-3 md:p-4 text-xs text-th-muted font-medium">Moto</th>
+                  <th className="text-right p-3 md:p-4 text-xs text-th-muted font-medium">Precio</th>
+                  <th className="text-right p-3 md:p-4 text-xs text-th-muted font-medium hidden sm:table-cell">Seguro/ano</th>
+                  <th className="text-right p-3 md:p-4 text-xs text-th-muted font-medium hidden md:table-cell">Seguro/mes</th>
+                  <th className="text-right p-3 md:p-4 text-xs text-th-muted font-medium">Total plan</th>
+                  <th className="text-right p-3 md:p-4 text-xs text-th-muted font-medium hidden sm:table-cell">Fecha est.</th>
+                  <th className="text-right p-3 md:p-4 text-xs text-th-muted font-medium">vs barata</th>
                 </tr>
               </thead>
               <tbody>
@@ -257,30 +240,29 @@ export function Motorcycles() {
                     return (
                       <motion.tr
                         key={moto.id}
-                        className={`border-b border-white/5 ${moto.active ? 'bg-accent-purple/5' : 'hover:bg-white/[0.02]'}`}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
+                        className={`border-b border-th-border ${moto.active ? 'bg-accent-purple/5' : 'hover:bg-th-hover'}`}
+                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: i * 0.05 }}
                       >
-                        <td className="p-4">
+                        <td className="p-3 md:p-4">
                           <div className="flex items-center gap-2">
-                            {moto.active && <div className="w-2 h-2 rounded-full bg-accent-purple" />}
-                            <span className={`font-medium ${moto.active ? 'text-accent-purple' : 'text-white'}`}>{moto.name}</span>
-                            <span className="text-xs text-gray-600">{moto.type}</span>
+                            {moto.active && <div className="w-2 h-2 rounded-full bg-accent-purple flex-shrink-0" />}
+                            <span className={`font-medium text-xs sm:text-sm ${moto.active ? 'text-accent-purple' : 'text-th-text'}`}>{moto.name}</span>
+                            <span className="text-[10px] text-th-faint hidden sm:inline">{moto.type}</span>
                           </div>
                         </td>
-                        <td className="p-4 text-right font-mono text-white">{formatCurrency(moto.price)}</td>
-                        <td className="p-4 text-right font-mono text-gray-400">{formatCurrency(moto.insuranceYear)}</td>
-                        <td className="p-4 text-right font-mono text-gray-400">{formatCurrency(moto.insuranceYear / 12)}</td>
-                        <td className="p-4 text-right font-mono font-medium text-white">{formatCurrency(totalPlan)}</td>
-                        <td className="p-4 text-right text-gray-400">
+                        <td className="p-3 md:p-4 text-right font-mono text-xs sm:text-sm text-th-text">{formatCurrency(moto.price)}</td>
+                        <td className="p-3 md:p-4 text-right font-mono text-xs sm:text-sm text-th-secondary hidden sm:table-cell">{formatCurrency(moto.insuranceYear)}</td>
+                        <td className="p-3 md:p-4 text-right font-mono text-xs sm:text-sm text-th-secondary hidden md:table-cell">{formatCurrency(moto.insuranceYear / 12)}</td>
+                        <td className="p-3 md:p-4 text-right font-mono text-xs sm:text-sm font-medium text-th-text">{formatCurrency(totalPlan)}</td>
+                        <td className="p-3 md:p-4 text-right text-xs text-th-secondary hidden sm:table-cell">
                           {estDate ? estDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }) : '-'}
                         </td>
-                        <td className="p-4 text-right">
+                        <td className="p-3 md:p-4 text-right">
                           {diff === 0 ? (
-                            <span className="text-accent-green text-xs font-medium">Mas barata</span>
+                            <span className="text-accent-green text-[10px] sm:text-xs font-medium">Mas barata</span>
                           ) : (
-                            <span className="text-accent-red text-xs font-mono">+{formatCurrency(diff)} (+{diffMonths}m)</span>
+                            <span className="text-accent-red text-[10px] sm:text-xs font-mono">+{formatCurrency(diff)} (+{diffMonths}m)</span>
                           )}
                         </td>
                       </motion.tr>
@@ -292,7 +274,6 @@ export function Motorcycles() {
         )}
       </AnimatePresence>
 
-      {/* Motorcycle Cards */}
       <motion.div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" variants={staggerContainer}>
         {motorcycles.map((moto, i) => {
           const totalPlan = fixedCost + moto.price + moto.insuranceYear;
@@ -304,45 +285,43 @@ export function Motorcycles() {
             <motion.div
               key={moto.id}
               variants={fadeUp}
-              className={`bg-surface rounded-xl border overflow-hidden card-glow ${
-                moto.active ? 'border-accent-purple/30' : 'border-white/5'
+              className={`bg-th-card rounded-xl border overflow-hidden card-glow ${
+                moto.active ? 'border-accent-purple/30' : 'border-th-border'
               }`}
               whileHover={{ y: -3 }}
             >
-              {/* Header */}
-              <div className="p-5">
+              <div className="p-4 md:p-5">
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-white">{moto.name}</h3>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-semibold text-th-text truncate">{moto.name}</h3>
                       {moto.active && (
                         <motion.span
                           className="text-[10px] bg-accent-purple/20 text-accent-purple px-2 py-0.5 rounded-full font-medium"
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
+                          initial={{ scale: 0 }} animate={{ scale: 1 }}
                           transition={{ type: 'spring', stiffness: 400, damping: 15 }}
                         >
                           ACTIVA
                         </motion.span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">{moto.type}</p>
+                    <p className="text-xs text-th-muted mt-0.5">{moto.type}</p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-shrink-0">
                     <motion.button
                       onClick={() => startEdit(moto)}
-                      className="p-1.5 text-gray-600 hover:text-white hover:bg-white/5 rounded transition-colors"
-                      whileHover={{ scale: 1.15 }}
-                      whileTap={{ scale: 0.85 }}
+                      className="p-1.5 text-th-faint hover:text-th-text hover:bg-th-hover rounded transition-colors"
+                      whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.85 }}
+                      aria-label={`Editar ${moto.name}`}
                     >
                       <Pencil size={13} />
                     </motion.button>
                     {!moto.active && (
                       <motion.button
                         onClick={() => { if (confirm(`Eliminar ${moto.name}?`)) deleteMotorcycle(moto.id); }}
-                        className="p-1.5 text-gray-600 hover:text-accent-red hover:bg-accent-red/10 rounded transition-colors"
-                        whileHover={{ scale: 1.15 }}
-                        whileTap={{ scale: 0.85 }}
+                        className="p-1.5 text-th-faint hover:text-accent-red hover:bg-accent-red/10 rounded transition-colors"
+                        whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.85 }}
+                        aria-label={`Eliminar ${moto.name}`}
                       >
                         <Trash2 size={13} />
                       </motion.button>
@@ -350,61 +329,55 @@ export function Motorcycles() {
                   </div>
                 </div>
 
-                {/* Price */}
                 <div className="mb-4">
-                  <p className="font-mono text-2xl font-bold text-white">{formatCurrency(moto.price)}</p>
-                  <p className="text-[10px] text-gray-600 font-mono">
+                  <p className="font-mono text-xl md:text-2xl font-bold text-th-text">{formatCurrency(moto.price)}</p>
+                  <p className="text-[10px] text-th-faint font-mono">
                     Rango: {formatCurrency(moto.priceMin)} - {formatCurrency(moto.priceMax)}
                   </p>
                 </div>
 
-                {/* Stats */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-surface-dark rounded-lg p-2.5">
+                <div className="grid grid-cols-2 gap-2 md:gap-3 mb-4">
+                  <div className="bg-th-input rounded-lg p-2 md:p-2.5">
                     <div className="flex items-center gap-1.5 mb-1">
-                      <Shield size={12} className="text-accent-amber" />
-                      <span className="text-[10px] text-gray-500">Seguro/ano</span>
+                      <Shield size={12} className="text-accent-amber" aria-hidden="true" />
+                      <span className="text-[10px] text-th-muted">Seguro/ano</span>
                     </div>
-                    <p className="font-mono text-sm font-medium text-white">{formatCurrency(moto.insuranceYear)}</p>
-                    <p className="font-mono text-[10px] text-gray-500">{formatCurrency(moto.insuranceYear / 12)}/mes</p>
+                    <p className="font-mono text-xs sm:text-sm font-medium text-th-text">{formatCurrency(moto.insuranceYear)}</p>
+                    <p className="font-mono text-[10px] text-th-muted">{formatCurrency(moto.insuranceYear / 12)}/mes</p>
                   </div>
-                  <div className="bg-surface-dark rounded-lg p-2.5">
+                  <div className="bg-th-input rounded-lg p-2 md:p-2.5">
                     <div className="flex items-center gap-1.5 mb-1">
-                      <DollarSign size={12} className="text-accent-green" />
-                      <span className="text-[10px] text-gray-500">Plan total</span>
+                      <DollarSign size={12} className="text-accent-green" aria-hidden="true" />
+                      <span className="text-[10px] text-th-muted">Plan total</span>
                     </div>
-                    <p className="font-mono text-sm font-medium text-white">{formatCurrency(totalPlan)}</p>
-                    <p className="font-mono text-[10px] text-gray-500">{formatCurrency(requiredMonthly)}/mes</p>
+                    <p className="font-mono text-xs sm:text-sm font-medium text-th-text">{formatCurrency(totalPlan)}</p>
+                    <p className="font-mono text-[10px] text-th-muted">{formatCurrency(requiredMonthly)}/mes</p>
                   </div>
                 </div>
 
-                {/* Estimated date */}
-                <div className="flex items-center gap-2 text-xs text-gray-500 mb-4">
-                  <Calendar size={12} />
+                <div className="flex items-center gap-2 text-xs text-th-muted mb-4">
+                  <Calendar size={12} aria-hidden="true" />
                   <span>
                     Fecha estimada: {estDate ? estDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) : 'N/A'}
                   </span>
                 </div>
 
-                {/* Notes */}
                 {moto.notes && (
-                  <p className="text-xs text-gray-500 leading-relaxed mb-4 line-clamp-3">{moto.notes}</p>
+                  <p className="text-xs text-th-muted leading-relaxed mb-4 line-clamp-3">{moto.notes}</p>
                 )}
               </div>
 
-              {/* Action */}
-              <div className="px-5 pb-5">
+              <div className="px-4 md:px-5 pb-4 md:pb-5">
                 {moto.active ? (
                   <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent-purple/10 text-accent-purple text-sm font-medium">
-                    <Check size={16} />
-                    Seleccionada
+                    <Check size={16} aria-hidden="true" /> Seleccionada
                   </div>
                 ) : (
                   <motion.button
                     onClick={() => setActiveMotorcycle(moto.id)}
-                    className="w-full py-2.5 rounded-xl bg-white/5 text-gray-400 hover:bg-accent-purple/15 hover:text-accent-purple text-sm font-medium transition-colors"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
+                    className="w-full py-2.5 rounded-xl bg-th-hover text-th-secondary hover:bg-accent-purple/15 hover:text-accent-purple text-sm font-medium transition-colors"
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                    aria-label={`Seleccionar ${moto.name} como activa`}
                   >
                     Seleccionar como activa
                   </motion.button>

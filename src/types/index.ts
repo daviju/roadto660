@@ -4,6 +4,7 @@ export interface Expense {
   amount: number;
   category: string;
   description: string;
+  createdAt?: string;
 }
 
 export interface Income {
@@ -12,6 +13,7 @@ export interface Income {
   amount: number;
   concept: string;
   description: string;
+  createdAt?: string;
 }
 
 export interface Budget {
@@ -59,16 +61,19 @@ export interface AppSettings {
   incomeConcepts: string[];
   payDay: number;
   cycleMode: 'calendar' | 'payday';
+  theme: 'dark' | 'light' | 'system';
 }
 
 export type Page =
   | 'dashboard'
+  | 'movements'
   | 'expenses'
   | 'income'
   | 'budget'
   | 'timeline'
   | 'charts'
   | 'motorcycles'
+  | 'advice'
   | 'settings';
 
 export interface MonthlySnapshot {
@@ -77,4 +82,13 @@ export interface MonthlySnapshot {
   income: number;
   expenses: number;
   savings: number;
+}
+
+export interface Movement {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  amount: number;
+  type: 'expense' | 'income';
 }

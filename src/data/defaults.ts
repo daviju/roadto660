@@ -44,6 +44,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   incomeConcepts: DEFAULT_INCOME_CONCEPTS,
   payDay: 28,
   cycleMode: 'payday',
+  theme: 'dark' as const,
 };
 
 // ─── Default Budgets ─────────────────────────────────────────────

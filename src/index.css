@@ -2,9 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme CSS Variables ─────────────────────────────────── */
+:root {
+  /* Dark theme (default) */
+  --bg-main: #0f1117;
+  --bg-card: #181b23;
+  --bg-card-light: #1f2330;
+  --bg-input: #0f1117;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-hover-subtle: rgba(255, 255, 255, 0.02);
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --text-faint: #4b5563;
+  --border-color: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+  --option-bg: #181b23;
+  --glow-opacity: 1;
+  --shadow-card: none;
+  --date-filter: invert(0.5);
+}
+
+:root.light {
+  --bg-main: #f8f9fb;
+  --bg-card: #ffffff;
+  --bg-card-light: #ffffff;
+  --bg-input: #f1f3f5;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-hover-subtle: rgba(0, 0, 0, 0.02);
+  --text-primary: #1a1b1e;
+  --text-secondary: #495057;
+  --text-muted: #868e96;
+  --text-faint: #adb5bd;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+  --option-bg: #ffffff;
+  --glow-opacity: 0;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --date-filter: none;
+}
+
+/* ─── Base styles ──────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -17,73 +62,124 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--scrollbar-thumb-hover);
 }
 
 body {
-  background-color: #0f1117;
-  color: #ffffff;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
   font-family: 'DM Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.5);
+  filter: var(--date-filter);
 }
 
 select option {
-  background-color: #181b23;
-  color: #ffffff;
+  background-color: var(--option-bg);
+  color: var(--text-primary);
 }
 
-/* ─── Card glow on hover ────────────────────────────────── */
+/* ─── Skip to content ──────────────────────────────────────── */
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 9999;
+}
+
+.skip-to-content:focus {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  width: auto;
+  height: auto;
+  padding: 8px 16px;
+  background: #a78bfa;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 9999;
+}
+
+/* ─── Focus visible ────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── Card glow on hover (dark mode only) ──────────────────── */
 .card-glow {
   position: relative;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: var(--shadow-card);
 }
 
 .card-glow:hover {
-  border-color: rgba(167, 139, 250, 0.15);
-  box-shadow:
-    0 0 20px -5px rgba(167, 139, 250, 0.08),
-    0 0 60px -15px rgba(167, 139, 250, 0.04);
+  border-color: rgba(167, 139, 250, calc(0.15 * var(--glow-opacity)));
+  box-shadow: var(--shadow-card),
+    0 0 20px -5px rgba(167, 139, 250, calc(0.08 * var(--glow-opacity))),
+    0 0 60px -15px rgba(167, 139, 250, calc(0.04 * var(--glow-opacity)));
 }
 
+.card-glow-green {
+  box-shadow: var(--shadow-card);
+}
 .card-glow-green:hover {
-  border-color: rgba(52, 211, 153, 0.15);
-  box-shadow:
-    0 0 20px -5px rgba(52, 211, 153, 0.08),
-    0 0 60px -15px rgba(52, 211, 153, 0.04);
+  border-color: rgba(52, 211, 153, calc(0.15 * var(--glow-opacity)));
+  box-shadow: var(--shadow-card),
+    0 0 20px -5px rgba(52, 211, 153, calc(0.08 * var(--glow-opacity))),
+    0 0 60px -15px rgba(52, 211, 153, calc(0.04 * var(--glow-opacity)));
 }
 
+.card-glow-red {
+  box-shadow: var(--shadow-card);
+}
 .card-glow-red:hover {
-  border-color: rgba(248, 113, 113, 0.15);
-  box-shadow:
-    0 0 20px -5px rgba(248, 113, 113, 0.08),
-    0 0 60px -15px rgba(248, 113, 113, 0.04);
+  border-color: rgba(248, 113, 113, calc(0.15 * var(--glow-opacity)));
+  box-shadow: var(--shadow-card),
+    0 0 20px -5px rgba(248, 113, 113, calc(0.08 * var(--glow-opacity))),
+    0 0 60px -15px rgba(248, 113, 113, calc(0.04 * var(--glow-opacity)));
 }
 
+.card-glow-amber {
+  box-shadow: var(--shadow-card);
+}
 .card-glow-amber:hover {
-  border-color: rgba(251, 191, 36, 0.15);
-  box-shadow:
-    0 0 20px -5px rgba(251, 191, 36, 0.08),
-    0 0 60px -15px rgba(251, 191, 36, 0.04);
+  border-color: rgba(251, 191, 36, calc(0.15 * var(--glow-opacity)));
+  box-shadow: var(--shadow-card),
+    0 0 20px -5px rgba(251, 191, 36, calc(0.08 * var(--glow-opacity))),
+    0 0 60px -15px rgba(251, 191, 36, calc(0.04 * var(--glow-opacity)));
 }
 
+.card-glow-cyan {
+  box-shadow: var(--shadow-card);
+}
 .card-glow-cyan:hover {
-  border-color: rgba(34, 211, 238, 0.15);
-  box-shadow:
-    0 0 20px -5px rgba(34, 211, 238, 0.08),
-    0 0 60px -15px rgba(34, 211, 238, 0.04);
+  border-color: rgba(34, 211, 238, calc(0.15 * var(--glow-opacity)));
+  box-shadow: var(--shadow-card),
+    0 0 20px -5px rgba(34, 211, 238, calc(0.08 * var(--glow-opacity))),
+    0 0 60px -15px rgba(34, 211, 238, calc(0.04 * var(--glow-opacity)));
 }
 
-/* ─── Progress bar shimmer ──────────────────────────────── */
+/* ─── Progress bar shimmer ──────────────────────────────────── */
 .progress-shimmer {
   position: relative;
   overflow: hidden;
@@ -111,7 +207,7 @@ select option {
   100% { transform: translateX(300%); }
 }
 
-/* ─── Pulse ring for active timeline nodes ──────────────── */
+/* ─── Pulse ring for active timeline nodes ──────────────────── */
 .pulse-ring {
   animation: pulseRing 2s ease-in-out infinite;
 }
@@ -122,7 +218,7 @@ select option {
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 
-/* ─── Gradient text animation ───────────────────────────── */
+/* ─── Gradient text animation ───────────────────────────────── */
 .gradient-text-animate {
   background-size: 200% auto;
   animation: gradientShift 3s ease infinite;
@@ -134,7 +230,7 @@ select option {
   100% { background-position: 0% center; }
 }
 
-/* ─── Subtle float for hero elements ────────────────────── */
+/* ─── Subtle float for hero elements ────────────────────────── */
 .float-subtle {
   animation: floatSubtle 4s ease-in-out infinite;
 }
@@ -144,7 +240,7 @@ select option {
   50%      { transform: translateY(-4px); }
 }
 
-/* ─── Nav active indicator ──────────────────────────────── */
+/* ─── Nav active indicator ──────────────────────────────────── */
 .nav-indicator {
   position: relative;
 }
@@ -164,4 +260,18 @@ select option {
 
 .nav-indicator.active::before {
   height: 60%;
+}
+
+/* ─── Safe area for mobile bottom nav ───────────────────────── */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ─── Hide scrollbar for mobile nav ─────────────────────────── */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
