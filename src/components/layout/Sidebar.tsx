@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useAuth } from '../../lib/auth';
+import { Logo } from '../shared/Logo';
 import type { Page } from '../../types';
 
 interface NavItem {
@@ -90,29 +91,19 @@ export function Sidebar() {
         aria-label="Navegacion principal"
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 p-4 border-b border-th-border">
-          <motion.div
-            className="w-8 h-8 rounded-lg bg-accent-purple/20 flex items-center justify-center flex-shrink-0"
-            whileHover={{ scale: 1.1, rotate: 5 }}
-            whileTap={{ scale: 0.9 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-          >
-            <span className="text-lg">🏍️</span>
-          </motion.div>
-          <AnimatePresence>
-            {sidebarOpen && (
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <h1 className="text-sm font-bold text-th-text whitespace-nowrap">RoadTo660</h1>
-                <p className="text-[10px] text-th-muted whitespace-nowrap">Planificador financiero</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div className="flex items-center p-4 border-b border-th-border overflow-hidden">
+          {sidebarOpen ? (
+            <Logo size="sm" animated={false} />
+          ) : (
+            <div className="w-8 h-8 flex-shrink-0">
+              <svg width="32" height="32" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="48" height="48" rx="12" fill="url(#sidebar-logo-grad)" />
+                <path d="M12 34 L20 16 L24 24 L28 14 L36 34" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <circle cx="36" cy="14" r="4" fill="#22d3ee" />
+                <defs><linearGradient id="sidebar-logo-grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop stopColor="#a78bfa" /><stop offset="1" stopColor="#7c3aed" /></linearGradient></defs>
+              </svg>
+            </div>
+          )}
         </div>
 
         {/* Nav */}

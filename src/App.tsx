@@ -13,11 +13,14 @@ import { Advice } from './components/advice/Advice';
 import { Goals } from './components/goals/Goals';
 import { AdminPanel } from './components/admin/AdminPanel';
 import { PricingPage } from './components/pricing/PricingPage';
+import { PrivacyPolicy } from './components/legal/PrivacyPolicy';
+import { RewardsPage } from './components/rewards/RewardsPage';
 import { LoginPage } from './components/auth/LoginPage';
 import { BannedScreen } from './components/auth/BannedScreen';
 import { Onboarding } from './components/auth/Onboarding';
 import { LoadingScreen } from './components/LoadingScreen';
 import { PaywallModal } from './components/shared/PaywallModal';
+import { ChatWidget } from './components/shared/ChatWidget';
 import { useStore } from './store/useStore';
 import { useAuth } from './lib/auth';
 import { pageVariants } from './utils/animations';
@@ -39,6 +42,8 @@ function PageRouter() {
       case 'settings': return <Settings />;
       case 'admin': return <AdminPanel />;
       case 'pricing': return <PricingPage />;
+      case 'privacy': return <PrivacyPolicy onBack={() => useStore.getState().setPage('settings')} />;
+      case 'rewards': return <RewardsPage />;
       default: return <Dashboard />;
     }
   };
@@ -91,6 +96,7 @@ export default function App() {
     <Layout>
       <PageRouter />
       <PaywallModal />
+      <ChatWidget />
     </Layout>
   );
 }

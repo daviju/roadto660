@@ -14,12 +14,18 @@ export interface ParsedMovement {
   isDuplicate: boolean;
 }
 
+export interface ImportError {
+  row: number;
+  reason: string;
+}
+
 export interface ImportSummary {
   movements: ParsedMovement[];
   newExpenses: number;
   newIncomes: number;
   duplicates: number;
   uncategorized: number;
+  errors: ImportError[];
 }
 
 function parseSpanishDate(dateStr: string): string {
@@ -62,6 +68,7 @@ export function parseExcelFile(
 
   const dataRows = rows.slice(headerIdx + 1);
   const movements: ParsedMovement[] = [];
+  const errors: ImportError[] = [];
 
   // Build a set of existing movement signatures for duplicate detection
   const existingKeys = new Set<string>();
@@ -72,7 +79,9 @@ export function parseExcelFile(
     existingKeys.add(`${i.date}|${Math.abs(i.amount).toFixed(2)}|${i.description}`);
   }
 
-  for (const row of dataRows) {
+  for (let ri = 0; ri < dataRows.length; ri++) {
+    const row = dataRows[ri];
+    const rowNum = headerIdx + 2 + ri; // 1-indexed for user display
     if (!row || row.length < 6) continue;
 
     // Columns: [empty/idx, F.Valor, Fecha, Concepto, Movimiento, Importe, Divisa, Disponible, ...]
@@ -81,14 +90,15 @@ export function parseExcelFile(
     const movimiento = String(row[4] ?? '');
     const importeRaw = row[5];
 
-    if (!fechaRaw || !importeRaw) continue;
+    if (!fechaRaw) { errors.push({ row: rowNum, reason: 'Fecha vacia' }); continue; }
+    if (!importeRaw) { errors.push({ row: rowNum, reason: 'Importe vacio' }); continue; }
 
     const date = parseSpanishDate(fechaRaw);
     let importe = typeof importeRaw === 'number'
       ? importeRaw
       : parseFloat(String(importeRaw).replace(/\./g, '').replace(',', '.'));
 
-    if (isNaN(importe)) continue;
+    if (isNaN(importe)) { errors.push({ row: rowNum, reason: 'Importe no valido' }); continue; }
 
     const { categoria, tipo } = categorize(concepto, movimiento, importe);
 
@@ -115,6 +125,7 @@ export function parseExcelFile(
     newIncomes: movements.filter((m) => m.tipo === 'ingreso' && !m.isDuplicate).length,
     duplicates: movements.filter((m) => m.isDuplicate).length,
     uncategorized: movements.filter((m) => !m.categoria && !m.isDuplicate).length,
+    errors,
   };
 }
 

@@ -1,17 +1,19 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX } from 'lucide-react';
+import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX, ExternalLink, Mail, Send, Loader2 } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../shared/Toast';
 import { formatCurrency } from '../../utils/format';
 import { staggerContainer, fadeUp, scaleFade } from '../../utils/animations';
 import { parseExcelFile, movementsToRecords } from '../../utils/excelImport';
 import type { ImportSummary } from '../../utils/excelImport';
 
 export function Settings() {
-  const { settings, updateSettings, exportData, importData, resetData, expenses, incomes, addExpenses, addIncomes } = useAppData();
-  const { profile, signOut } = useAuth();
+  const { settings, updateSettings, exportData, importData, resetData, expenses, incomes, addExpenses, addIncomes, setPage } = useAppData();
+  const { profile, session, signOut } = useAuth();
+  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +42,9 @@ export function Settings() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Email reports
+  const [sendingReport, setSendingReport] = useState(false);
+
   const handleSave = async () => {
     await updateSettings({
       currentBalance: parseFloat(balance) || 0,
@@ -50,19 +55,25 @@ export function Settings() {
       payDay: Math.max(1, Math.min(31, parseInt(payDayInput) || 28)),
       cycleMode: cycleModeInput,
     });
+    toast.success('Cambios guardados correctamente');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const handleExport = () => {
-    const json = exportData();
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `roadto660-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const json = exportData();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `roadto-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Datos exportados correctamente');
+    } catch {
+      toast.error('Error al exportar los datos');
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,27 +117,50 @@ export function Settings() {
 
   const handleConfirmExcel = async () => {
     if (!excelSummary) return;
+    const totalNew = excelSummary.newExpenses + excelSummary.newIncomes;
+
+    if (totalNew === 0) {
+      toast.info('Todos los registros del archivo ya estan en tu cuenta. No se ha importado nada.');
+      setExcelSummary(null);
+      return;
+    }
+
     setExcelImporting(true);
-    const { expenses: newExp, incomes: newInc } = movementsToRecords(excelSummary.movements);
-    if (newExp.length > 0) await addExpenses(newExp);
-    if (newInc.length > 0) await addIncomes(newInc);
-    setExcelMsg(`Importados: ${newExp.length} gastos, ${newInc.length} ingresos`);
+    try {
+      const { expenses: newExp, incomes: newInc } = movementsToRecords(excelSummary.movements);
+      if (newExp.length > 0) await addExpenses(newExp);
+      if (newInc.length > 0) await addIncomes(newInc);
+      const dupeMsg = excelSummary.duplicates > 0 ? ` ${excelSummary.duplicates} duplicados descartados.` : '';
+      toast.success(`Importacion completada: ${newExp.length + newInc.length} registros nuevos.${dupeMsg}`);
+    } catch {
+      toast.error('Error al importar: no se pudieron guardar los registros. Intentalo de nuevo.');
+    }
     setExcelSummary(null);
     setExcelImporting(false);
-    setTimeout(() => setExcelMsg(''), 4000);
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirmText !== 'ELIMINAR') return;
+    if (deleteConfirmText !== 'ELIMINAR' || !session?.access_token) return;
     setDeleteLoading(true);
     try {
-      // Wipe all user data first
-      await resetData();
-      // Delete the auth user (Supabase cascades to profile via DB trigger)
-      await supabase.auth.admin?.deleteUser(profile!.id).catch(() => null);
-      // Best-effort: sign out regardless
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Error al eliminar la cuenta');
+        setDeleteLoading(false);
+        return;
+      }
+      toast.info('Tu cuenta ha sido eliminada');
       await signOut();
-    } finally {
+    } catch {
+      toast.error('Error de conexion al eliminar la cuenta');
       setDeleteLoading(false);
     }
   };
@@ -166,6 +200,31 @@ export function Settings() {
 
   const handleThemeChange = async (theme: 'dark' | 'light' | 'system') => {
     await updateSettings({ theme });
+  };
+
+  const handleSendReportNow = async () => {
+    if (!session?.access_token) return;
+    setSendingReport(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/send-report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Error al enviar el informe');
+      } else {
+        toast.success('Informe enviado a tu email');
+      }
+    } catch {
+      toast.error('Error de conexion');
+    } finally {
+      setSendingReport(false);
+    }
   };
 
   return (
@@ -458,6 +517,22 @@ export function Settings() {
                     <span className="font-mono text-accent-amber">{excelSummary.uncategorized}</span>
                   </div>
                 )}
+                {excelSummary.errors.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm items-center">
+                      <span className="text-accent-red flex items-center gap-1">
+                        <X size={12} /> Errores
+                      </span>
+                      <span className="font-mono text-accent-red">{excelSummary.errors.length}</span>
+                    </div>
+                    <div className="text-xs text-th-muted space-y-0.5 max-h-20 overflow-y-auto">
+                      {excelSummary.errors.slice(0, 5).map((err, i) => (
+                        <p key={i}>Fila {err.row}: {err.reason}</p>
+                      ))}
+                      {excelSummary.errors.length > 5 && <p>...y {excelSummary.errors.length - 5} mas</p>}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex gap-3 justify-end pt-2">
                 <motion.button onClick={() => setExcelSummary(null)}
@@ -507,26 +582,87 @@ export function Settings() {
         )}
       </AnimatePresence>
 
-      {/* RGPD - Zona de peligro */}
-      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-accent-red/20 space-y-3">
-        <h3 className="text-sm font-semibold text-accent-red flex items-center gap-2">
-          <UserX size={14} /> Zona de peligro
-        </h3>
-        <p className="text-xs text-th-secondary">
-          Elimina tu cuenta y todos los datos asociados de forma permanente. Esta accion no se puede deshacer.
-        </p>
+      {/* Email Reports (PRO) */}
+      {profile?.plan === 'pro' && (
+        <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border space-y-4 card-glow">
+          <h3 className="text-sm font-semibold text-th-text flex items-center gap-2">
+            <Mail size={14} className="text-accent-purple" /> Informes por email
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={profile?.email_reports_enabled ?? false}
+                onChange={async (e) => {
+                  const { updateProfile } = await import('../../lib/auth').then(m => ({ updateProfile: m.useAuth }));
+                  // Use the context directly — this is simpler
+                }}
+                className="w-4 h-4 rounded border-th-border text-accent-purple focus:ring-accent-purple/30 bg-th-input"
+                disabled
+              />
+              <span className="text-sm text-th-secondary">Recibir informes periodicos</span>
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center">
+            <select
+              value={profile?.email_reports_frequency || 'monthly'}
+              onChange={() => {}}
+              className="bg-th-input border border-th-border rounded-lg px-3 py-1.5 text-sm text-th-text"
+              disabled
+            >
+              <option value="monthly">Mensual</option>
+              <option value="quarterly">Trimestral</option>
+              <option value="biannual">Semestral</option>
+              <option value="annual">Anual</option>
+            </select>
+            <motion.button
+              onClick={handleSendReportNow}
+              disabled={sendingReport}
+              className="flex items-center gap-2 px-3 py-1.5 bg-accent-purple/15 text-accent-purple rounded-lg text-xs font-medium hover:bg-accent-purple/25 transition-colors disabled:opacity-50"
+              whileTap={{ scale: 0.97 }}
+            >
+              {sendingReport ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              Enviar informe ahora
+            </motion.button>
+          </div>
+          {profile?.email_reports_last_sent && (
+            <p className="text-xs text-th-muted">
+              Ultimo informe: {new Date(profile.email_reports_last_sent).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          )}
+        </motion.div>
+      )}
+
+      {/* Legal / RGPD */}
+      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border space-y-3 card-glow">
+        <h3 className="text-sm font-semibold text-th-text">Privacidad y datos</h3>
         <div className="flex flex-wrap gap-2">
+          <motion.button onClick={() => setPage('privacy')}
+            className="flex items-center gap-2 px-3 py-2 bg-accent-purple/15 text-accent-purple rounded-lg text-xs font-medium hover:bg-accent-purple/25 transition-colors"
+            whileTap={{ scale: 0.97 }}>
+            <ExternalLink size={12} /> Politica de privacidad
+          </motion.button>
           <motion.button onClick={handleExport}
             className="flex items-center gap-2 px-3 py-2 bg-accent-cyan/15 text-accent-cyan rounded-lg text-xs font-medium hover:bg-accent-cyan/25 transition-colors"
             whileTap={{ scale: 0.97 }}>
             <Download size={12} /> Exportar mis datos (RGPD)
           </motion.button>
-          <motion.button onClick={() => setShowDeleteAccount(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-accent-red/15 text-accent-red rounded-lg text-xs font-medium hover:bg-accent-red/25 transition-colors"
-            whileTap={{ scale: 0.97 }}>
-            <Trash2 size={12} /> Eliminar cuenta
-          </motion.button>
         </div>
+      </motion.div>
+
+      {/* Zona de peligro */}
+      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-accent-red/20 space-y-3">
+        <h3 className="text-sm font-semibold text-accent-red flex items-center gap-2">
+          <UserX size={14} /> Zona de peligro
+        </h3>
+        <p className="text-xs text-th-secondary">
+          Esta accion es irreversible. Se borraran todos tus datos permanentemente.
+        </p>
+        <motion.button onClick={() => setShowDeleteAccount(true)}
+          className="flex items-center gap-2 px-3 py-2 bg-accent-red/15 text-accent-red rounded-lg text-xs font-medium hover:bg-accent-red/25 transition-colors"
+          whileTap={{ scale: 0.97 }}>
+          <Trash2 size={12} /> Eliminar cuenta
+        </motion.button>
       </motion.div>
 
       {/* Delete Account Modal */}

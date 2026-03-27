@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './lib/auth';
 import { DataProvider } from './lib/DataProvider';
+import { ToastProvider } from './components/shared/Toast';
 import './index.css';
 
 function applyTheme(theme: 'dark' | 'light' | 'system') {
@@ -36,10 +37,12 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AuthProvider>
-      <DataProvider>
-        <App />
-      </DataProvider>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <DataProvider>
+          <App />
+        </DataProvider>
+      </AuthProvider>
+    </ToastProvider>
   </React.StrictMode>
 );

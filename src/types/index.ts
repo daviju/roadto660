@@ -28,6 +28,10 @@ export interface Profile {
   module_tips: boolean;
   module_simulator: boolean;
   onboarding_completed: boolean;
+  privacy_accepted_at: string | null;
+  email_reports_enabled: boolean;
+  email_reports_frequency: 'monthly' | 'quarterly' | 'biannual' | 'annual';
+  email_reports_last_sent: string | null;
   points: number;
   streak_days: number;
   last_active_date: string | null;
@@ -158,7 +162,9 @@ export type Page =
   | 'advice'
   | 'settings'
   | 'admin'
-  | 'pricing';
+  | 'pricing'
+  | 'privacy'
+  | 'rewards';
 
 export interface AuthState {
   user: User | null;
@@ -261,4 +267,7 @@ export interface Movement {
   category: string;
   amount: number;
   type: 'expense' | 'income';
+  createdAt?: string;
+  source?: 'manual' | 'excel_import';
+  originalConcept?: string;
 }

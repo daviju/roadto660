@@ -39,6 +39,7 @@ export function Onboarding() {
   const { user, updateProfile } = useAuth();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [showCustomCategories, setShowCustomCategories] = useState(false);
 
   // Step 1
   const [fullName, setFullName] = useState(user?.user_metadata?.full_name || '');
@@ -218,7 +219,7 @@ export function Onboarding() {
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-th-text">Datos basicos</h2>
-                    <p className="text-xs text-th-muted">Solo necesitamos lo esencial</p>
+                    <p className="text-xs text-th-muted">Solo necesitamos lo esencial. Podras modificar todo esto en Ajustes en cualquier momento.</p>
                   </div>
                 </div>
 
@@ -284,7 +285,7 @@ export function Onboarding() {
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-th-text">Modulos</h2>
-                    <p className="text-xs text-th-muted">Activa los que te interesen</p>
+                    <p className="text-xs text-th-muted">Activa los que te interesen. Podras cambiarlos en Ajustes.</p>
                   </div>
                 </div>
 
@@ -320,73 +321,102 @@ export function Onboarding() {
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-th-text">Categorias</h2>
-                    <p className="text-xs text-th-muted">Activa y pon presupuesto a cada una</p>
+                    <p className="text-xs text-th-muted">Hemos preparado categorias basicas. Podras personalizarlas en Ajustes.</p>
                   </div>
                 </div>
 
-                <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                  {DEFAULT_CATEGORIES.map((c) => (
-                    <div
-                      key={c.slug}
-                      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
-                        enabledCats.has(c.slug)
-                          ? 'border-accent-purple/30 bg-accent-purple/5'
-                          : 'border-th-border opacity-50'
-                      }`}
-                    >
-                      <button
-                        onClick={() => toggleCat(c.slug)}
-                        className="flex-shrink-0"
-                        aria-label={`Toggle ${c.name}`}
-                      >
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white"
-                          style={{ backgroundColor: c.color }}
-                        >
-                          {c.name.charAt(0)}
-                        </div>
-                      </button>
-                      <span className="text-sm text-th-text flex-1">{c.name}</span>
-                      {enabledCats.has(c.slug) && (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={catBudgets[c.slug] || ''}
-                            onChange={(e) =>
-                              setCatBudgets((prev) => ({ ...prev, [c.slug]: Number(e.target.value) }))
-                            }
-                            className="w-20 px-2 py-1 bg-th-input border border-th-border rounded-lg text-th-text text-xs text-right"
-                            placeholder="0"
-                            min={0}
-                            max={999999}
-                            aria-label={`Presupuesto ${c.name}`}
-                          />
-                          <span className="text-xs text-th-muted">EUR</span>
-                        </div>
-                      )}
+                {!showCustomCategories ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      {DEFAULT_CATEGORIES.filter(c => enabledCats.has(c.slug)).map((c) => (
+                        <span key={c.slug} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-purple/10 border border-accent-purple/20 text-sm text-th-text">
+                          <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: c.color }} />
+                          {c.name}
+                        </span>
+                      ))}
                     </div>
-                  ))}
-
-                  {/* Add custom */}
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="text"
-                      value={newCatName}
-                      onChange={(e) => setNewCatName(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-th-input border border-th-border rounded-xl text-th-text text-sm"
-                      placeholder="Añadir categoria..."
-                      maxLength={50}
-                      onKeyDown={(e) => e.key === 'Enter' && addCustomCat()}
-                    />
-                    <button
-                      onClick={addCustomCat}
-                      className="p-2 bg-accent-purple/15 text-accent-purple rounded-xl hover:bg-accent-purple/25 transition-colors"
-                      aria-label="Añadir categoria"
-                    >
-                      <Plus size={18} />
-                    </button>
+                    <div className="flex gap-3">
+                      <motion.button
+                        onClick={() => setStep(4)}
+                        className="flex-1 py-2.5 bg-accent-purple text-white font-medium rounded-xl text-sm hover:bg-accent-purple/90 transition-colors"
+                        {...buttonTap}
+                      >
+                        Usar estas categorias
+                      </motion.button>
+                      <motion.button
+                        onClick={() => setShowCustomCategories(true)}
+                        className="flex-1 py-2.5 border border-th-border text-th-secondary rounded-xl text-sm hover:bg-th-hover transition-colors"
+                        {...buttonTap}
+                      >
+                        Personalizar
+                      </motion.button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                    {DEFAULT_CATEGORIES.map((c) => (
+                      <div
+                        key={c.slug}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                          enabledCats.has(c.slug)
+                            ? 'border-accent-purple/30 bg-accent-purple/5'
+                            : 'border-th-border opacity-50'
+                        }`}
+                      >
+                        <button
+                          onClick={() => toggleCat(c.slug)}
+                          className="flex-shrink-0"
+                          aria-label={`Toggle ${c.name}`}
+                        >
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white"
+                            style={{ backgroundColor: c.color }}
+                          >
+                            {c.name.charAt(0)}
+                          </div>
+                        </button>
+                        <span className="text-sm text-th-text flex-1">{c.name}</span>
+                        {enabledCats.has(c.slug) && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={catBudgets[c.slug] || ''}
+                              onChange={(e) =>
+                                setCatBudgets((prev) => ({ ...prev, [c.slug]: Number(e.target.value) }))
+                              }
+                              className="w-20 px-2 py-1 bg-th-input border border-th-border rounded-lg text-th-text text-xs text-right"
+                              placeholder="0"
+                              min={0}
+                              max={999999}
+                              aria-label={`Presupuesto ${c.name}`}
+                            />
+                            <span className="text-xs text-th-muted">EUR</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Add custom */}
+                    <div className="flex items-center gap-2 pt-2">
+                      <input
+                        type="text"
+                        value={newCatName}
+                        onChange={(e) => setNewCatName(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-th-input border border-th-border rounded-xl text-th-text text-sm"
+                        placeholder="Añadir categoria..."
+                        maxLength={50}
+                        onKeyDown={(e) => e.key === 'Enter' && addCustomCat()}
+                      />
+                      <button
+                        onClick={addCustomCat}
+                        className="p-2 bg-accent-purple/15 text-accent-purple rounded-xl hover:bg-accent-purple/25 transition-colors"
+                        aria-label="Añadir categoria"
+                      >
+                        <Plus size={18} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 

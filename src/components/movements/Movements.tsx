@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUpRight, ArrowDownRight, Search, Edit3, Trash2, Check, X } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Search, Edit3, Trash2, Check, X, ChevronDown } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
+import { useToast } from '../shared/Toast';
 import { formatCurrency, formatDate, getCurrentMonth } from '../../utils/format';
 import { getMonthExpenses, getMonthIncome } from '../../utils/calculations';
 import { staggerContainer, fadeUp, listItem } from '../../utils/animations';
@@ -14,8 +15,10 @@ export function Movements() {
   const [filterCategory, setFilterCategory] = useState('');
   const [searchText, setSearchText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const { toast } = useToast();
 
   // Build month options
   const months = useMemo(() => {
@@ -93,9 +96,15 @@ export function Movements() {
   };
 
   const handleDelete = (m: Movement) => {
-    if (!confirm(`Eliminar "${m.description}"?`)) return;
     if (m.type === 'expense') deleteExpense(m.id);
     else deleteIncome(m.id);
+    setExpandedId(null);
+    toast.success(`"${m.description}" eliminado`);
+  };
+
+  const toggleExpand = (id: string) => {
+    if (editingId) return;
+    setExpandedId(expandedId === id ? null : id);
   };
 
   return (
@@ -181,39 +190,102 @@ export function Movements() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        m.type === 'income' ? 'bg-accent-green/15' : 'bg-accent-red/15'
-                      }`}>
-                        {m.type === 'income'
-                          ? <ArrowUpRight size={12} className="text-accent-green" aria-hidden="true" />
-                          : <ArrowDownRight size={12} className="text-accent-red" aria-hidden="true" />
-                        }
+                  <div>
+                    {/* Collapsed row — click to expand */}
+                    <button
+                      onClick={() => toggleExpand(m.id)}
+                      className="w-full flex items-center justify-between gap-2 text-left"
+                    >
+                      <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          m.type === 'income' ? 'bg-accent-green/15' : 'bg-accent-red/15'
+                        }`}>
+                          {m.type === 'income'
+                            ? <ArrowUpRight size={12} className="text-accent-green" aria-hidden="true" />
+                            : <ArrowDownRight size={12} className="text-accent-red" aria-hidden="true" />
+                          }
+                        </div>
+                        <span className="text-xs text-th-muted font-mono w-16 hidden sm:block flex-shrink-0">{formatDate(m.date)}</span>
+                        <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                          m.type === 'income' ? 'bg-accent-green/10 text-accent-green' : 'bg-th-hover text-th-muted'
+                        }`}>{m.category}</span>
+                        <span className="text-sm text-th-secondary truncate">{m.description}</span>
                       </div>
-                      <span className="text-xs text-th-muted font-mono w-16 hidden sm:block flex-shrink-0">{formatDate(m.date)}</span>
-                      <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
-                        m.type === 'income' ? 'bg-accent-green/10 text-accent-green' : 'bg-th-hover text-th-muted'
-                      }`}>{m.category}</span>
-                      <span className="text-sm text-th-secondary truncate">{m.description}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-                      <span className={`font-mono text-sm font-medium ${
-                        m.type === 'income' ? 'text-accent-green' : 'text-th-text'
-                      }`}>
-                        {m.type === 'income' ? '+' : '-'}{formatCurrency(m.amount)}
-                      </span>
-                      <motion.button onClick={() => startEdit(m)}
-                        className="p-1 text-th-faint hover:text-th-text hover:bg-th-hover rounded transition-colors"
-                        whileTap={{ scale: 0.85 }} aria-label="Editar movimiento">
-                        <Edit3 size={13} />
-                      </motion.button>
-                      <motion.button onClick={() => handleDelete(m)}
-                        className="p-1 text-th-faint hover:text-accent-red hover:bg-accent-red/10 rounded transition-colors"
-                        whileTap={{ scale: 0.85 }} aria-label="Eliminar movimiento">
-                        <Trash2 size={13} />
-                      </motion.button>
-                    </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className={`font-mono text-sm font-medium ${
+                          m.type === 'income' ? 'text-accent-green' : 'text-th-text'
+                        }`}>
+                          {m.type === 'income' ? '+' : '-'}{formatCurrency(m.amount)}
+                        </span>
+                        <motion.div
+                          animate={{ rotate: expandedId === m.id ? 180 : 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="text-th-faint"
+                        >
+                          <ChevronDown size={14} />
+                        </motion.div>
+                      </div>
+                    </button>
+
+                    {/* Expanded detail panel */}
+                    <AnimatePresence>
+                      {expandedId === m.id && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-3 pt-3 border-t border-th-border space-y-2 text-xs">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-th-muted">Categoria:</span>
+                                <span className="ml-2 text-th-text">{m.category}</span>
+                              </div>
+                              <div>
+                                <span className="text-th-muted">Fecha:</span>
+                                <span className="ml-2 text-th-text font-mono">{formatDate(m.date)}</span>
+                              </div>
+                              {m.createdAt && (
+                                <div>
+                                  <span className="text-th-muted">Registrado:</span>
+                                  <span className="ml-2 text-th-text font-mono">{formatDate(m.createdAt)}</span>
+                                </div>
+                              )}
+                              {m.source && (
+                                <div>
+                                  <span className="text-th-muted">Origen:</span>
+                                  <span className="ml-2 text-th-text">{m.source === 'excel_import' ? 'Importado de Excel' : 'Manual'}</span>
+                                </div>
+                              )}
+                              {m.originalConcept && m.originalConcept !== m.description && (
+                                <div className="col-span-2">
+                                  <span className="text-th-muted">Concepto original:</span>
+                                  <span className="ml-2 text-th-text">"{m.originalConcept}"</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                              <motion.button
+                                onClick={(e) => { e.stopPropagation(); startEdit(m); setExpandedId(null); }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-th-hover text-th-secondary rounded-lg hover:text-th-text transition-colors"
+                                whileTap={{ scale: 0.95 }}
+                              >
+                                <Edit3 size={12} /> Editar
+                              </motion.button>
+                              <motion.button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(m); }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-red/10 text-accent-red rounded-lg hover:bg-accent-red/20 transition-colors"
+                                whileTap={{ scale: 0.95 }}
+                              >
+                                <Trash2 size={12} /> Eliminar
+                              </motion.button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
               </motion.div>

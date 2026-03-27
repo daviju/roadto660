@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, Users, Crown, Activity, UserPlus, Search,
   ChevronDown, ChevronUp, Ban, RefreshCw, Star,
-  AlertTriangle, Check, X, Filter,
+  AlertTriangle, Check, X, Filter, DollarSign, ScrollText,
+  Clock, Eye,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
@@ -83,6 +84,12 @@ export function AdminPanel() {
     userName: string;
     payload?: Record<string, unknown>;
   } | null>(null);
+  const [activeTab, setActiveTab] = useState<'users' | 'audit'>('users');
+  const [auditLogs, setAuditLogs] = useState<
+    { id: string; user_id: string | null; action: string; details: Record<string, unknown> | null; ip_address: string | null; created_at: string }[]
+  >([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditFilter, setAuditFilter] = useState('');
 
   // Check admin access
   const isAdmin = currentProfile?.role === 'admin';
@@ -107,6 +114,39 @@ export function AdminPanel() {
     fetchProfiles();
   }, [isAdmin]);
 
+  // Fetch audit logs when tab switches
+  useEffect(() => {
+    if (!isAdmin || activeTab !== 'audit') return;
+
+    const fetchAuditLogs = async () => {
+      setAuditLoading(true);
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (data && !error) {
+        setAuditLogs(data);
+      }
+      setAuditLoading(false);
+    };
+
+    fetchAuditLogs();
+  }, [isAdmin, activeTab]);
+
+  // Filtered audit logs
+  const filteredAuditLogs = useMemo(() => {
+    if (!auditFilter.trim()) return auditLogs;
+    const q = auditFilter.toLowerCase();
+    return auditLogs.filter(
+      (log) =>
+        log.action.toLowerCase().includes(q) ||
+        (log.user_id && log.user_id.toLowerCase().includes(q)) ||
+        JSON.stringify(log.details || {}).toLowerCase().includes(q)
+    );
+  }, [auditLogs, auditFilter]);
+
   // ─── KPI calculations ──────────────────────────────────
   const kpis = useMemo(() => {
     const now = new Date();
@@ -126,7 +166,10 @@ export function AdminPanel() {
       (p) => new Date(p.created_at) >= thirtyDaysAgo
     ).length;
 
-    return { totalUsers, proUsers, activeUsers, newUsers };
+    // MRR: PRO users × 3.99€
+    const mrr = proUsers * 3.99;
+
+    return { totalUsers, proUsers, activeUsers, newUsers, mrr };
   }, [profiles]);
 
   // ─── Filtered list ─────────────────────────────────────
@@ -283,7 +326,7 @@ export function AdminPanel() {
 
       {/* KPI Cards */}
       <motion.div
-        className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4"
+        className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4"
         variants={staggerContainer}
         initial="initial"
         animate="animate"
@@ -312,8 +355,43 @@ export function AdminPanel() {
           icon={<UserPlus size={18} />}
           color="text-accent-cyan"
         />
+        <KPIMiniCard
+          title="MRR"
+          value={`€${kpis.mrr.toFixed(2)}`}
+          icon={<DollarSign size={18} />}
+          color="text-accent-green"
+        />
       </motion.div>
 
+      {/* Tabs */}
+      <motion.div variants={fadeUp} className="flex gap-1 bg-th-card border border-th-border rounded-xl p-1">
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'users'
+              ? 'bg-accent-purple/15 text-accent-purple'
+              : 'text-th-muted hover:text-th-text hover:bg-th-hover'
+          }`}
+        >
+          <Users size={14} />
+          Usuarios
+        </button>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'audit'
+              ? 'bg-accent-purple/15 text-accent-purple'
+              : 'text-th-muted hover:text-th-text hover:bg-th-hover'
+          }`}
+        >
+          <ScrollText size={14} />
+          Audit Log
+        </button>
+      </motion.div>
+
+      {/* ─── Users Tab ──────────────────────────────────── */}
+      {activeTab === 'users' && (
+      <>
       {/* Filters */}
       <motion.div
         variants={fadeUp}
@@ -749,6 +827,113 @@ export function AdminPanel() {
           </motion.div>
         )}
       </AnimatePresence>
+      </>
+      )}
+
+      {/* ─── Audit Log Tab ─────────────────────────────────── */}
+      {activeTab === 'audit' && (
+      <>
+        {/* Audit filter */}
+        <motion.div variants={fadeUp} className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-th-muted"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
+              value={auditFilter}
+              onChange={(e) => setAuditFilter(e.target.value)}
+              placeholder="Filtrar por accion, usuario o detalle..."
+              className="w-full bg-th-card border border-th-border-strong rounded-lg pl-9 pr-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors"
+              aria-label="Filtrar audit log"
+            />
+          </div>
+          <p className="text-xs text-th-muted">
+            {filteredAuditLogs.length} entradas
+          </p>
+        </motion.div>
+
+        {/* Audit log list */}
+        {auditLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : filteredAuditLogs.length === 0 ? (
+          <motion.div
+            variants={fadeUp}
+            className="bg-th-card rounded-xl p-8 border border-th-border text-center"
+          >
+            <ScrollText size={28} className="text-th-faint mx-auto mb-2" />
+            <p className="text-sm text-th-muted">No hay entradas en el audit log</p>
+          </motion.div>
+        ) : (
+          <motion.div className="space-y-2" variants={staggerContainer} initial="initial" animate="animate">
+            {filteredAuditLogs.map((log) => {
+              const userProfile = profiles.find((p) => p.id === log.user_id);
+              const userName = userProfile?.full_name || userProfile?.email || log.user_id || 'Sistema';
+
+              return (
+                <motion.div
+                  key={log.id}
+                  className="bg-th-card rounded-xl border border-th-border p-3 md:p-4"
+                  variants={fadeUpSmall}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Icon */}
+                    <div className="w-8 h-8 rounded-lg bg-accent-purple/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Eye size={14} className="text-accent-purple" aria-hidden="true" />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-medium px-2 py-0.5 bg-accent-cyan/10 text-accent-cyan rounded-full">
+                          {log.action}
+                        </span>
+                        <span className="text-[10px] text-th-muted flex items-center gap-1">
+                          <Clock size={10} aria-hidden="true" />
+                          {new Date(log.created_at).toLocaleString('es-ES', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-th-secondary truncate">
+                        <span className="text-th-muted">Usuario:</span>{' '}
+                        <span className="font-medium text-th-text">{userName}</span>
+                        {log.ip_address && (
+                          <>
+                            {' '}<span className="text-th-muted">| IP:</span>{' '}
+                            <span className="font-mono">{log.ip_address}</span>
+                          </>
+                        )}
+                      </p>
+
+                      {/* Details */}
+                      {log.details && Object.keys(log.details).length > 0 && (
+                        <div className="mt-2 bg-th-bg rounded-lg p-2 overflow-x-auto">
+                          <pre className="text-[10px] text-th-muted font-mono whitespace-pre-wrap break-all">
+                            {JSON.stringify(log.details, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
+      </>
+      )}
     </motion.div>
   );
 }
