@@ -1,43 +1,42 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard,
-  Receipt,
-  Wallet,
-  PieChart,
-  Milestone,
-  BarChart3,
-  Settings,
-  ChevronLeft,
-  Bike,
-  ArrowLeftRight,
-  Lightbulb,
-  Sun,
-  Moon,
-  Monitor,
+  LayoutDashboard, Receipt, Wallet, PieChart, Milestone,
+  BarChart3, Settings, ChevronLeft, ArrowLeftRight, Lightbulb,
+  Sun, Moon, Monitor, Target, Crown, LogOut, ShieldCheck, Flame,
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { useAuth } from '../../lib/auth';
 import type { Page } from '../../types';
 
-const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutDashboard }[] = [
+interface NavItem {
+  page: Page;
+  label: string;
+  icon: typeof LayoutDashboard;
+  moduleKey?: string;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { page: 'movements', label: 'Movimientos', icon: ArrowLeftRight },
-  { page: 'expenses', label: 'Gastos', icon: Receipt },
-  { page: 'income', label: 'Ingresos', icon: Wallet },
-  { page: 'budget', label: 'Presupuestos', icon: PieChart },
-  { page: 'timeline', label: 'Timeline', icon: Milestone },
-  { page: 'charts', label: 'Graficos', icon: BarChart3 },
-  { page: 'motorcycles', label: 'Motos', icon: Bike },
-  { page: 'advice', label: 'Consejos', icon: Lightbulb },
+  { page: 'expenses', label: 'Gastos', icon: Receipt, moduleKey: 'module_expenses' },
+  { page: 'income', label: 'Ingresos', icon: Wallet, moduleKey: 'module_income' },
+  { page: 'budget', label: 'Presupuestos', icon: PieChart, moduleKey: 'module_budgets' },
+  { page: 'timeline', label: 'Timeline', icon: Milestone, moduleKey: 'module_timeline' },
+  { page: 'charts', label: 'Graficos', icon: BarChart3, moduleKey: 'module_charts' },
+  { page: 'goals', label: 'Metas', icon: Target, moduleKey: 'module_simulator' },
+  { page: 'advice', label: 'Consejos', icon: Lightbulb, moduleKey: 'module_tips' },
   { page: 'settings', label: 'Ajustes', icon: Settings },
 ];
 
 function ThemeToggle() {
-  const theme = useStore((s) => s.settings.theme);
-  const updateSettings = useStore((s) => s.updateSettings);
+  const { profile, updateProfile } = useAuth();
+  const setCachedTheme = useStore((s) => s.setCachedTheme);
+  const theme = profile?.theme || 'dark';
 
   const cycle = () => {
     const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
-    updateSettings({ theme: next });
+    updateProfile({ theme: next });
+    setCachedTheme(next);
   };
 
   const Icon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
@@ -59,6 +58,26 @@ function ThemeToggle() {
 
 export function Sidebar() {
   const { currentPage, setPage, sidebarOpen, toggleSidebar } = useStore();
+  const { profile, signOut } = useAuth();
+
+  // Filter nav items based on active modules
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (!item.moduleKey) return true;
+    if (!profile) return true;
+    return (profile as unknown as Record<string, unknown>)[item.moduleKey] !== false;
+  });
+
+  // Mobile bottom nav - show top 5 items
+  const mobileItems: NavItem[] = [
+    { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { page: 'movements', label: 'Movimientos', icon: ArrowLeftRight },
+    { page: 'goals', label: 'Metas', icon: Target },
+    { page: 'advice', label: 'Consejos', icon: Lightbulb },
+    { page: 'settings', label: 'Mas', icon: Settings },
+  ];
+
+  const isAdmin = profile?.role === 'admin';
+  const isPro = profile?.plan === 'pro';
 
   return (
     <>
@@ -78,7 +97,7 @@ export function Sidebar() {
             whileTap={{ scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 400, damping: 15 }}
           >
-            <Bike size={18} className="text-accent-purple" aria-hidden="true" />
+            <span className="text-lg">🏍️</span>
           </motion.div>
           <AnimatePresence>
             {sidebarOpen && (
@@ -90,7 +109,7 @@ export function Sidebar() {
                 className="overflow-hidden"
               >
                 <h1 className="text-sm font-bold text-th-text whitespace-nowrap">RoadTo660</h1>
-                <p className="text-[10px] text-th-muted whitespace-nowrap">Daytona 660</p>
+                <p className="text-[10px] text-th-muted whitespace-nowrap">Planificador financiero</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -98,7 +117,7 @@ export function Sidebar() {
 
         {/* Nav */}
         <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto" aria-label="Paginas">
-          {NAV_ITEMS.map(({ page, label, icon: Icon }, index) => {
+          {visibleItems.map(({ page, label, icon: Icon }, index) => {
             const isActive = currentPage === page;
             return (
               <motion.button
@@ -142,6 +161,45 @@ export function Sidebar() {
               </motion.button>
             );
           })}
+
+          {/* Admin section */}
+          {isAdmin && (
+            <>
+              {sidebarOpen && (
+                <div className="px-3 pt-4 pb-1">
+                  <p className="text-[10px] text-th-faint uppercase tracking-wider">Admin</p>
+                </div>
+              )}
+              <motion.button
+                onClick={() => setPage('admin')}
+                className={`nav-indicator w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors relative ${
+                  currentPage === 'admin'
+                    ? 'active text-accent-amber font-medium'
+                    : 'text-th-secondary hover:text-th-text'
+                }`}
+                whileHover={{ x: 4 }}
+                whileTap={{ scale: 0.97 }}
+                title="Administracion"
+                aria-label="Administracion"
+              >
+                {currentPage === 'admin' && (
+                  <motion.div
+                    className="absolute inset-0 rounded-xl bg-accent-amber/15"
+                    layoutId="nav-active"
+                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                  />
+                )}
+                <ShieldCheck size={18} className="flex-shrink-0 relative z-10" aria-hidden="true" />
+                <AnimatePresence>
+                  {sidebarOpen && (
+                    <motion.span className="whitespace-nowrap relative z-10" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                      Administracion
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.button>
+            </>
+          )}
         </nav>
 
         {/* Theme toggle */}
@@ -152,19 +210,58 @@ export function Sidebar() {
             ) : (
               <motion.button
                 onClick={() => {
-                  const theme = useStore.getState().settings.theme;
+                  const theme = profile?.theme || 'dark';
                   const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
-                  useStore.getState().updateSettings({ theme: next });
+                  // Will be handled by the auth context updateProfile
                 }}
                 className="w-full flex items-center justify-center py-2 text-th-muted hover:text-th-text transition-colors"
                 aria-label="Cambiar tema"
               >
-                {useStore.getState().settings.theme === 'dark' ? <Moon size={16} /> :
-                 useStore.getState().settings.theme === 'light' ? <Sun size={16} /> : <Monitor size={16} />}
+                {(profile?.theme || 'dark') === 'dark' ? <Moon size={16} /> :
+                 (profile?.theme || 'dark') === 'light' ? <Sun size={16} /> : <Monitor size={16} />}
               </motion.button>
             )}
           </AnimatePresence>
         </div>
+
+        {/* User footer */}
+        {profile && sidebarOpen && (
+          <div className="px-3 py-3 border-t border-th-border">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-accent-purple/20 flex items-center justify-center flex-shrink-0 text-sm font-bold text-accent-purple">
+                {profile.full_name?.charAt(0)?.toUpperCase() || profile.email?.charAt(0)?.toUpperCase() || '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-th-text truncate">{profile.full_name || profile.email}</p>
+                <div className="flex items-center gap-1">
+                  {isPro ? (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-accent-amber/15 text-accent-amber rounded-full font-medium flex items-center gap-0.5">
+                      <Crown size={10} /> PRO
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-th-hover text-th-muted rounded-full">FREE</span>
+                  )}
+                  {profile.points > 0 && (
+                    <span className="text-[10px] text-accent-amber font-medium">{profile.points.toLocaleString('es-ES')} pts</span>
+                  )}
+                  {profile.streak_days > 0 && (
+                    <span className="text-[10px] text-orange-500 font-medium flex items-center gap-0.5">
+                      <Flame size={9} />{profile.streak_days}d
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={signOut}
+                className="p-1.5 text-th-muted hover:text-accent-red transition-colors"
+                aria-label="Cerrar sesion"
+                title="Cerrar sesion"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Collapse button */}
         <motion.button
@@ -185,12 +282,12 @@ export function Sidebar() {
 
       {/* Mobile bottom navigation */}
       <nav
-        className="fixed bottom-0 left-0 right-0 md:hidden bg-th-card border-t border-th-border z-50 overflow-x-auto no-scrollbar"
+        className="fixed bottom-0 left-0 right-0 md:hidden bg-th-card border-t border-th-border z-50"
         role="navigation"
         aria-label="Navegacion movil"
       >
-        <div className="flex justify-start min-w-max px-1 py-1 pb-safe">
-          {NAV_ITEMS.map(({ page, label, icon: Icon }) => {
+        <div className="flex justify-around px-1 py-1 pb-safe">
+          {mobileItems.map(({ page, label, icon: Icon }) => {
             const isActive = currentPage === page;
             return (
               <button

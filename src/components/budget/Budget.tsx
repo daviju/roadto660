@@ -1,13 +1,13 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency, getCurrentMonth } from '../../utils/format';
 import { getCategoryExpenses } from '../../utils/calculations';
 import { staggerContainer, fadeUp, collapseVariants } from '../../utils/animations';
 
 export function Budget() {
-  const { budgets, updateBudget, addBudget, deleteBudget, expenses, settings } = useStore();
+  const { budgets, updateBudget, addBudget, deleteBudget, expenses, settings } = useAppData();
   const currentMonth = getCurrentMonth(settings.payDay, settings.cycleMode);
   const [showAdd, setShowAdd] = useState(false);
   const [newCategory, setNewCategory] = useState('');

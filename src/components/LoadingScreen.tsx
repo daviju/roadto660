@@ -13,7 +13,7 @@ export function LoadingScreen() {
         <h1 className="text-3xl font-bold tracking-tight text-th-text">
           Road<span className="text-accent-purple">To660</span>
         </h1>
-        <p className="text-th-muted text-sm">Plan de ahorro para la moto</p>
+        <p className="text-th-muted text-sm">Tu planificador financiero</p>
       </motion.div>
 
       <motion.div
@@ -30,7 +30,7 @@ export function LoadingScreen() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.6 }}
       >
-        Conectando con Firebase...
+        Cargando...
       </motion.p>
     </div>
   );

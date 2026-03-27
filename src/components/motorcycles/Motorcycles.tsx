@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bike, Check, Plus, Pencil, Trash2, X, Shield, DollarSign, Calendar } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency } from '../../utils/format';
 import {
   getAvailableBalance,
@@ -19,7 +19,7 @@ export function Motorcycles() {
   const {
     motorcycles, setActiveMotorcycle, addMotorcycle, updateMotorcycle, deleteMotorcycle,
     phases, settings, expenses,
-  } = useStore();
+  } = useAppData();
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [showCompare, setShowCompare] = useState(false);

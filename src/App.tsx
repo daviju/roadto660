@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './components/dashboard/Dashboard';
@@ -8,12 +8,18 @@ import { Budget } from './components/budget/Budget';
 import { Timeline } from './components/timeline/Timeline';
 import { Charts } from './components/charts/Charts';
 import { Settings } from './components/settings/Settings';
-import { Motorcycles } from './components/motorcycles/Motorcycles';
 import { Movements } from './components/movements/Movements';
 import { Advice } from './components/advice/Advice';
+import { Goals } from './components/goals/Goals';
+import { AdminPanel } from './components/admin/AdminPanel';
+import { PricingPage } from './components/pricing/PricingPage';
+import { LoginPage } from './components/auth/LoginPage';
+import { BannedScreen } from './components/auth/BannedScreen';
+import { Onboarding } from './components/auth/Onboarding';
 import { LoadingScreen } from './components/LoadingScreen';
+import { PaywallModal } from './components/shared/PaywallModal';
 import { useStore } from './store/useStore';
-import { initializeSync } from './firebase/sync';
+import { useAuth } from './lib/auth';
 import { pageVariants } from './utils/animations';
 
 function PageRouter() {
@@ -28,9 +34,11 @@ function PageRouter() {
       case 'budget': return <Budget />;
       case 'timeline': return <Timeline />;
       case 'charts': return <Charts />;
-      case 'motorcycles': return <Motorcycles />;
+      case 'goals': return <Goals />;
       case 'advice': return <Advice />;
       case 'settings': return <Settings />;
+      case 'admin': return <AdminPanel />;
+      case 'pricing': return <PricingPage />;
       default: return <Dashboard />;
     }
   };
@@ -51,10 +59,12 @@ function PageRouter() {
 }
 
 export default function App() {
-  const [ready, setReady] = useState(false);
-  const theme = useStore((s) => s.settings.theme);
+  const { user, profile, loading } = useAuth();
+  const cachedTheme = useStore((s) => s.cachedTheme);
+  const setCachedTheme = useStore((s) => s.setCachedTheme);
 
-  // Apply theme class whenever it changes
+  // Apply theme
+  const theme = profile?.theme || cachedTheme;
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'system') {
@@ -63,17 +73,24 @@ export default function App() {
     } else {
       root.classList.toggle('light', theme === 'light');
     }
-  }, [theme]);
+    setCachedTheme(theme);
+  }, [theme, setCachedTheme]);
 
-  useEffect(() => {
-    initializeSync().then(() => setReady(true));
-  }, []);
+  if (loading) return <LoadingScreen />;
 
-  if (!ready) return <LoadingScreen />;
+  // Not authenticated
+  if (!user) return <LoginPage />;
+
+  // Banned
+  if (profile?.is_banned) return <BannedScreen />;
+
+  // Onboarding not completed
+  if (profile && !profile.onboarding_completed) return <Onboarding />;
 
   return (
     <Layout>
       <PageRouter />
+      <PaywallModal />
     </Layout>
   );
 }

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Edit3, X, Check, Filter } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency, formatDate, todayISO, getCurrentMonth } from '../../utils/format';
 import { getMonthExpenses, getExpensesByCategory } from '../../utils/calculations';
 import { staggerContainer, fadeUp, listItem, collapseVariants } from '../../utils/animations';
 
 export function Expenses() {
-  const { expenses, addExpense, updateExpense, deleteExpense, settings } = useStore();
+  const { expenses, addExpense, updateExpense, deleteExpense, settings } = useAppData();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');

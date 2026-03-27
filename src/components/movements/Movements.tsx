@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUpRight, ArrowDownRight, Search, Edit3, Trash2, Check, X } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency, formatDate, getCurrentMonth } from '../../utils/format';
 import { getMonthExpenses, getMonthIncome } from '../../utils/calculations';
 import { staggerContainer, fadeUp, listItem } from '../../utils/animations';
 import type { Movement } from '../../types';
 
 export function Movements() {
-  const { expenses, incomes, settings, updateExpense, deleteExpense, updateIncome, deleteIncome } = useStore();
+  const { expenses, incomes, settings, updateExpense, deleteExpense, updateIncome, deleteIncome } = useAppData();
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth(settings.payDay, settings.cycleMode));
   const [filterType, setFilterType] = useState<'all' | 'expense' | 'income'>('all');
   const [filterCategory, setFilterCategory] = useState('');

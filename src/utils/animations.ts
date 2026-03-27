@@ -133,7 +133,7 @@ export const listItem: Variants = {
 export const cardHover = {
   whileHover: {
     y: -2,
-    transition: { type: 'spring', stiffness: 400, damping: 25 },
+    transition: { type: 'spring' as const, stiffness: 400, damping: 25 },
   },
   whileTap: { scale: 0.985 },
 };

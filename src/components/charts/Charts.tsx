@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useStore } from '../../store/useStore';
+import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency, getCurrentMonth, formatMonth } from '../../utils/format';
 import { getAvailableBalance, getTotalObjective, getTotalPaid, getExpensesByCategory, getMonthTotalExpenses, getMonthTotalIncome, projectSavingsTimeline } from '../../utils/calculations';
 import { staggerContainer, fadeUp } from '../../utils/animations';
@@ -14,7 +14,7 @@ const tooltipStyle = {
 };
 
 export function Charts() {
-  const { settings, phases, expenses, incomes } = useStore();
+  const { settings, phases, expenses, incomes } = useAppData();
   const currentMonth = getCurrentMonth(settings.payDay, settings.cycleMode);
 
   const totalObjective = getTotalObjective(phases);

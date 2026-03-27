@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Circle, Clock, ChevronDown, Pencil, Trash2, Plus, X } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { getPhaseTotal, getPhasePaid, getDaysRemaining } from '../../utils/calculations';
 import { staggerContainer, fadeUp, collapseVariants } from '../../utils/animations';
@@ -9,7 +9,7 @@ import { staggerContainer, fadeUp, collapseVariants } from '../../utils/animatio
 interface EditState { itemId: string; name: string; cost: string; }
 
 export function Timeline() {
-  const { phases, togglePhaseItem, updatePhaseStatus, updatePhaseItem, addPhaseItem, removePhaseItem } = useStore();
+  const { phases, togglePhaseItem, updatePhaseStatus, updatePhaseItem, addPhaseItem, removePhaseItem } = useAppData();
   const [expandedPhase, setExpandedPhase] = useState<string | null>(phases[0]?.id ?? null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [addingTo, setAddingTo] = useState<string | null>(null);

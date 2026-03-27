@@ -1,7 +1,8 @@
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
-import { Target, Wallet, TrendingUp, Calendar, Gauge, ArrowUpRight, ArrowDownRight, Bike, ArrowRight } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { Target, Wallet, TrendingUp, Calendar, Gauge, ArrowUpRight, ArrowDownRight, Bike, ArrowRight, Flame, Star } from 'lucide-react';
+import { useAppData } from '../../lib/DataProvider';
+import { useAuth } from '../../lib/auth';
 import { KPICard } from './KPICard';
 import { PhaseProgress } from './PhaseProgress';
 import { getAvailableBalance, getTotalObjective, getTotalPaid, getDaysRemaining, getRequiredMonthlySavings, getMonthTotalExpenses, getMonthTotalIncome } from '../../utils/calculations';
@@ -9,7 +10,8 @@ import { formatCurrency, formatPercent, getCurrentMonth } from '../../utils/form
 import { staggerContainer, fadeUp } from '../../utils/animations';
 
 export function Dashboard() {
-  const { settings, phases, expenses, incomes, motorcycles, setPage } = useStore();
+  const { settings, phases, expenses, incomes, motorcycles, setPage } = useAppData();
+  const { profile } = useAuth();
   const currentMonth = getCurrentMonth(settings.payDay, settings.cycleMode);
 
   const activeMoto = motorcycles.find(m => m.active);
@@ -172,6 +174,36 @@ export function Dashboard() {
           <p className="text-xs text-th-muted mt-2">Pagado: {formatCurrency(totalPaid)}</p>
         </motion.div>
       </motion.div>
+
+      {/* Gamification */}
+      {profile && (profile.points > 0 || profile.streak_days > 0) && (
+        <motion.div variants={fadeUp} className="flex flex-wrap gap-3">
+          {profile.points > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-accent-amber/10 border border-accent-amber/20 rounded-xl">
+              <motion.div
+                animate={{ rotate: [0, 15, -15, 0] }}
+                transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+              >
+                <Star size={16} className="text-accent-amber" />
+              </motion.div>
+              <span className="text-sm font-semibold text-accent-amber">{profile.points.toLocaleString('es-ES')}</span>
+              <span className="text-xs text-th-muted">puntos</span>
+            </div>
+          )}
+          {profile.streak_days > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+              >
+                <Flame size={16} className="text-orange-500" />
+              </motion.div>
+              <span className="text-sm font-semibold text-orange-500">{profile.streak_days}</span>
+              <span className="text-xs text-th-muted">{profile.streak_days === 1 ? 'dia seguido' : 'dias seguidos'}</span>
+            </div>
+          )}
+        </motion.div>
+      )}
     </motion.div>
   );
 }

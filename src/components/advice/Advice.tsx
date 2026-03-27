@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, TrendingDown, TrendingUp, Lightbulb, Zap, Target, ShieldAlert, Coins } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency, getCurrentMonth } from '../../utils/format';
 import {
   getMonthTotalExpenses,
@@ -24,7 +24,7 @@ interface Tip {
 }
 
 export function Advice() {
-  const { expenses, incomes, budgets, settings, phases } = useStore();
+  const { expenses, incomes, budgets, settings, phases } = useAppData();
   const currentMonth = getCurrentMonth(settings.payDay, settings.cycleMode);
 
   const tips = useMemo((): Tip[] => {
