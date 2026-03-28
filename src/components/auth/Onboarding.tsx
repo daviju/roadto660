@@ -101,7 +101,7 @@ export function Onboarding() {
     setSaving(true);
 
     try {
-      // 1. Insert categories first (non-blocking — errors won't trap the user)
+      // 1. Upsert categories (safe if Excel importer already created them)
       try {
         const catsToInsert = DEFAULT_CATEGORIES.filter((c) => enabledCats.has(c.slug)).map(
           (c, i) => ({
@@ -132,39 +132,53 @@ export function Onboarding() {
           type: 'income' as const,
         }));
 
-        const { error: catError } = await supabase.from('categories').insert([...catsToInsert, ...incomeCats]);
+        const { error: catError } = await supabase
+          .from('categories')
+          .upsert([...catsToInsert, ...incomeCats], { onConflict: 'user_id,slug', ignoreDuplicates: true });
         if (catError) {
-          console.error('Error inserting categories:', catError);
-          toast.error('No se pudieron crear las categorias, podras añadirlas en Ajustes');
+          console.error('Error upserting categories:', catError);
         }
       } catch (catErr) {
-        console.error('Categories insert exception:', catErr);
-        toast.error('No se pudieron crear las categorias, podras añadirlas en Ajustes');
+        console.error('Categories upsert exception:', catErr);
       }
 
       // 2. Save profile + mark onboarding complete (always, even if categories failed)
-      await updateProfile({
-        full_name: fullName,
-        monthly_income: parseFloat(monthlyIncome) || 0,
-        pay_day: payDay,
-        currency,
-        ...modules,
-        onboarding_completed: true,
-      } as Partial<any>);
-    } catch (err) {
-      console.error('Onboarding finish error:', err);
+      console.log('[Onboarding] Saving profile with onboarding_completed=true');
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: fullName,
+          monthly_income: parseFloat(monthlyIncome) || 0,
+          pay_day: payDay,
+          currency,
+          ...modules,
+          onboarding_completed: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
 
-      // Last resort: force-set onboarding_completed so user isn't trapped
-      try {
-        await supabase
-          .from('profiles')
-          .update({ onboarding_completed: true })
-          .eq('id', user.id);
-      } catch (forceErr) {
-        console.error('Force onboarding_completed failed:', forceErr);
+      if (profileError) {
+        console.error('Profile update error:', profileError);
       }
 
+      // 3. Refresh the auth context so the app sees onboarding_completed=true
+      await updateProfile({ onboarding_completed: true } as Partial<any>);
+    } catch (err) {
+      console.error('Onboarding finish error:', err);
       toast.error('Hubo un error al guardar. Puedes ajustar todo en Configuracion.');
+    }
+
+    // ALWAYS mark onboarding complete — user must never be trapped
+    try {
+      await supabase
+        .from('profiles')
+        .update({ onboarding_completed: true })
+        .eq('id', user.id);
+      // Force-refresh profile in auth context
+      await updateProfile({ onboarding_completed: true } as Partial<any>);
+    } catch {
+      // Nothing more we can do
+      console.error('Force onboarding_completed failed');
     } finally {
       setSaving(false);
     }
