@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, FileSpreadsheet, X, Check, AlertTriangle,
-  Loader2, Building2, ArrowRight, ArrowLeft,
+  Loader2, Building2,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useToast } from './Toast';
@@ -32,12 +32,15 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
   const [selectedBank, setSelectedBank] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Guard: prevent backdrop close while the native file picker is open
+  const [pickingFile, setPickingFile] = useState(false);
 
   const reset = () => {
     setStep('bank');
     setSelectedBank(null);
     setSummary(null);
     setError(null);
+    setPickingFile(false);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -46,18 +49,40 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
     onClose();
   };
 
+  const handleBackdropClick = () => {
+    // Don't close during file picking, parsing, or inserting
+    if (pickingFile || step === 'parsing' || step === 'inserting') return;
+    handleClose();
+  };
+
   // ─── Step 1: Bank selected → open file picker ───────────
   const handleBankSelect = (bankId: string) => {
     setSelectedBank(bankId);
     setError(null);
-    // Immediately trigger file picker
-    setTimeout(() => fileRef.current?.click(), 100);
+    setPickingFile(true);
+    // Small delay so React can flush the state update before the native dialog opens
+    setTimeout(() => {
+      console.log('[ExcelImport] Opening file picker for bank:', bankId);
+      fileRef.current?.click();
+    }, 150);
   };
 
   // ─── Step 2: File selected → parse + dedup ──────────────
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPickingFile(false);
     const file = e.target.files?.[0];
-    if (!file || !selectedBank || !user) return;
+    console.log('[ExcelImport] onChange fired. File:', file?.name, 'Size:', file?.size, 'Bank:', selectedBank);
+
+    if (!file) {
+      // User cancelled the file picker
+      console.log('[ExcelImport] No file selected (user cancelled)');
+      return;
+    }
+
+    if (!selectedBank || !user) {
+      console.error('[ExcelImport] Missing selectedBank or user', { selectedBank, user: !!user });
+      return;
+    }
 
     // Validate extension
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -66,12 +91,20 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
       return;
     }
 
+    console.log('[ExcelImport] Starting parse...');
     setStep('parsing');
     setError(null);
 
     try {
       const buffer = await file.arrayBuffer();
+      console.log('[ExcelImport] ArrayBuffer read, size:', buffer.byteLength);
       const result = await buildImportSummary(selectedBank, buffer, user.id);
+      console.log('[ExcelImport] Summary built:', {
+        total: result.all.length,
+        new: result.newOnes.length,
+        dupes: result.duplicates.length,
+        errors: result.errors.length,
+      });
       setSummary(result);
       setStep('summary');
 
@@ -87,7 +120,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
-  };
+  }, [selectedBank, user, toast]);
 
   // ─── Step 3: User confirms → insert ─────────────────────
   const handleConfirmInsert = async () => {
@@ -148,7 +181,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={step === 'parsing' || step === 'inserting' ? undefined : handleClose}
+        onClick={handleBackdropClick}
       >
         <motion.div
           className="bg-th-card rounded-2xl p-5 md:p-6 border border-th-border-strong max-w-md w-full space-y-4"
@@ -180,7 +213,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
                   <motion.button
                     key={bank.id}
                     onClick={() => bank.enabled && handleBankSelect(bank.id)}
-                    disabled={!bank.enabled}
+                    disabled={!bank.enabled || pickingFile}
                     className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-colors ${
                       bank.enabled
                         ? 'border-th-border hover:border-accent-purple hover:bg-accent-purple/5 text-th-text cursor-pointer'
@@ -303,16 +336,17 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
               <p className="text-sm text-th-secondary">Importando registros...</p>
             </div>
           )}
-        </motion.div>
 
-        {/* Hidden file input */}
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xlsx,.xls"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
+          {/* Hidden file input — INSIDE the stopPropagation div so closing
+              the native file picker doesn't fire a click on the backdrop */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+        </motion.div>
       </motion.div>
     </AnimatePresence>
   );
