@@ -76,28 +76,65 @@ function categorize(concepto: string, movimiento: string, amount: number, type: 
 
 // ─── BBVA Parser ──────────────────────────────────────────────
 
+/** Scan first rows for "ltimos movimientos" (accent-safe) in any cell */
+function findTitleRow(rows: unknown[][]): number {
+  const limit = Math.min(rows.length, 8);
+  for (let i = 0; i < limit; i++) {
+    const row = rows[i];
+    if (!row) continue;
+    for (const cell of row as unknown[]) {
+      if (cell && String(cell).includes('ltimos movimientos')) return i;
+    }
+  }
+  return -1;
+}
+
+/** Find the header row containing "Concepto" or "F.Valor" */
+function findHeaderRow(rows: unknown[][]): number {
+  const limit = Math.min(rows.length, 10);
+  for (let i = 0; i < limit; i++) {
+    const row = rows[i];
+    if (!row) continue;
+    for (const cell of row as unknown[]) {
+      const s = String(cell ?? '').toLowerCase();
+      if (s === 'concepto' || s === 'f.valor') return i;
+    }
+  }
+  return -1;
+}
+
 export const bbvaParser: BankParser = {
   bankId: 'bbva',
   bankName: 'BBVA',
   enabled: true,
 
   validate(rows: unknown[][]): boolean {
-    if (rows.length < 6) return false;
-    const titulo = String(rows[1]?.[3] ?? '');
-    return titulo.includes('ltimos movimientos') || titulo.includes('Últimos movimientos');
+    // Debug: log first rows so we can see exactly what SheetJS returns
+    const limit = Math.min(rows.length, 6);
+    for (let i = 0; i < limit; i++) {
+      console.log(`[BBVA] Row ${i}:`, JSON.stringify(rows[i]));
+    }
+
+    if (rows.length < 3) return false;
+    const titleIdx = findTitleRow(rows);
+    console.log('[BBVA] Title row index:', titleIdx);
+    return titleIdx !== -1;
   },
 
   parse(rows: unknown[][]): ParseResult {
     const transactions: RawTransaction[] = [];
     const errors: ParseError[] = [];
 
-    console.log(`[BBVA] Total filas leidas: ${rows.length}`);
-    console.log('[BBVA] Fila 4 (cabeceras):', rows[4]);
-    if (rows[5]) console.log('[BBVA] Fila 5 (primer dato):', rows[5]);
-    if (rows[6]) console.log('[BBVA] Fila 6 (segundo dato):', rows[6]);
+    // Dynamically find header row instead of assuming fixed offset
+    const headerIdx = findHeaderRow(rows);
+    const dataStart = headerIdx !== -1 ? headerIdx + 1 : 5; // fallback to 5
 
-    // Data starts at row 5 (0-indexed), row 4 is headers
-    for (let i = 5; i < rows.length; i++) {
+    console.log(`[BBVA] Total filas leidas: ${rows.length}`);
+    console.log(`[BBVA] Header row: ${headerIdx}, Data starts at: ${dataStart}`);
+    if (rows[headerIdx]) console.log('[BBVA] Cabeceras:', rows[headerIdx]);
+    if (rows[dataStart]) console.log('[BBVA] Primer dato:', rows[dataStart]);
+
+    for (let i = dataStart; i < rows.length; i++) {
       const row = rows[i];
       const displayRow = i + 1; // 1-indexed for user
       if (!row || (row as unknown[]).length < 6) continue;
