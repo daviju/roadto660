@@ -4,7 +4,8 @@ import { Check, Crown, Zap, AlertCircle, Loader2 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 import { useAuth } from '../../lib/auth';
 import { staggerContainer, fadeUp } from '../../utils/animations';
-import { redirectToCheckout } from '../../lib/stripe';
+import { redirectToCheckout, isStripeEnabled } from '../../lib/stripe';
+import { STRIPE_PRICES, type StripePlan } from '../../lib/stripe-config';
 
 const FREE_FEATURES = [
   '1 objetivo de ahorro',
@@ -32,12 +33,16 @@ export function PricingPage() {
   const { profile, session } = useAuth();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<StripePlan>('monthly');
+
+  const stripeReady = isStripeEnabled();
+  const price = STRIPE_PRICES[selectedPlan];
 
   const handleUpgrade = async () => {
     if (!session?.access_token) return;
     setCheckoutLoading(true);
     setCheckoutError(null);
-    const { error } = await redirectToCheckout(session.access_token);
+    const { error } = await redirectToCheckout(session.access_token, price.id);
     if (error) setCheckoutError(error);
     setCheckoutLoading(false);
   };
@@ -102,10 +107,45 @@ export function PricingPage() {
                 <span className="text-xs px-2 py-0.5 bg-accent-amber/15 text-accent-amber rounded font-medium">Plan actual</span>
               )}
             </div>
+
+            {/* Plan toggle */}
+            {!isPro && (
+              <div className="flex gap-1 bg-th-bg rounded-lg p-1 mb-3">
+                <button
+                  onClick={() => setSelectedPlan('monthly')}
+                  className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                    selectedPlan === 'monthly'
+                      ? 'bg-accent-amber/15 text-accent-amber'
+                      : 'text-th-muted hover:text-th-text'
+                  }`}
+                >
+                  Mensual
+                </button>
+                <button
+                  onClick={() => setSelectedPlan('annual')}
+                  className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                    selectedPlan === 'annual'
+                      ? 'bg-accent-amber/15 text-accent-amber'
+                      : 'text-th-muted hover:text-th-text'
+                  }`}
+                >
+                  Anual
+                  <span className="ml-1 text-[10px] px-1.5 py-0.5 bg-accent-green/15 text-accent-green rounded-full">
+                    -{STRIPE_PRICES.annual.savings}%
+                  </span>
+                </button>
+              </div>
+            )}
+
             <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-bold text-th-text">3,99€</span>
-              <span className="text-th-muted text-sm">/mes</span>
+              <span className="text-4xl font-bold text-th-text">{price.amount.toFixed(2).replace('.', ',')}€</span>
+              <span className="text-th-muted text-sm">/{price.interval}</span>
             </div>
+            {selectedPlan === 'annual' && !isPro && (
+              <p className="text-xs text-accent-green mt-1">
+                Equivale a {(STRIPE_PRICES.annual.amount / 12).toFixed(2).replace('.', ',')}€/mes
+              </p>
+            )}
             <p className="text-xs text-th-muted mt-1">Cancela cuando quieras</p>
           </div>
 
@@ -127,12 +167,14 @@ export function PricingPage() {
               <>
                 <motion.button
                   onClick={handleUpgrade}
-                  disabled={checkoutLoading}
+                  disabled={checkoutLoading || !stripeReady}
                   className="w-full py-2.5 bg-accent-amber text-white rounded-xl text-sm font-semibold hover:bg-accent-amber/80 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                  whileHover={{ scale: checkoutLoading ? 1 : 1.02 }} whileTap={{ scale: checkoutLoading ? 1 : 0.97 }}>
+                  whileHover={{ scale: checkoutLoading || !stripeReady ? 1 : 1.02 }} whileTap={{ scale: checkoutLoading || !stripeReady ? 1 : 0.97 }}>
                   {checkoutLoading
                     ? <><Loader2 size={14} className="animate-spin" /> Redirigiendo...</>
-                    : <><Zap size={14} /> Actualizar a PRO</>}
+                    : !stripeReady
+                    ? <>Pagos no disponibles</>
+                    : <><Zap size={14} /> Actualizar a PRO — {price.amount.toFixed(2).replace('.', ',')}€/{price.interval}</>}
                 </motion.button>
                 {checkoutError && (
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-red-500">

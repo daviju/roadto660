@@ -2,8 +2,8 @@
 // Deploy: supabase functions deploy create-checkout
 // Env vars needed in Supabase dashboard:
 //   STRIPE_SECRET_KEY   — sk_live_... or sk_test_...
-//   STRIPE_PRICE_ID     — price_... (PRO monthly)
 //   SITE_URL            — https://yourusername.github.io/roadto660
+// The priceId is sent from the client (public Stripe price IDs are safe to expose)
 
 import Stripe from 'https://esm.sh/stripe@14?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=deno';
@@ -71,7 +71,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const siteUrl = Deno.env.get('SITE_URL') ?? 'http://localhost:5173';
-    const priceId = Deno.env.get('STRIPE_PRICE_ID') ?? '';
+
+    // Accept priceId from client, fall back to env var for backwards compatibility
+    const body = await req.json().catch(() => ({}));
+    const priceId = (body as { priceId?: string }).priceId || Deno.env.get('STRIPE_PRICE_ID') || '';
+    if (!priceId) {
+      return new Response(JSON.stringify({ error: 'No se ha configurado el precio' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Create checkout session
     const session = await stripe.checkout.sessions.create({

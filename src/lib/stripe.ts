@@ -1,9 +1,21 @@
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, type Stripe } from '@stripe/stripe-js';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
+// Gracefully handle missing key — stripePromise resolves to null
+const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+const stripePromise: Promise<Stripe | null> = publishableKey
+  ? loadStripe(publishableKey)
+  : Promise.resolve(null);
 
-export const redirectToCheckout = async (accessToken: string): Promise<{ error?: string }> => {
+/** Whether Stripe is configured (key present). UI can use this to disable payment buttons. */
+export const isStripeEnabled = (): boolean => !!publishableKey;
+
+export const redirectToCheckout = async (
+  accessToken: string,
+  priceId: string,
+): Promise<{ error?: string }> => {
   try {
+    if (!publishableKey) return { error: 'Pagos no disponibles: Stripe no esta configurado' };
+
     const stripe = await stripePromise;
     if (!stripe) return { error: 'Stripe no disponible' };
 
@@ -14,7 +26,7 @@ export const redirectToCheckout = async (accessToken: string): Promise<{ error?:
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ priceId }),
     });
 
     if (!response.ok) {
