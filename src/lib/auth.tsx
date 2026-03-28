@@ -36,24 +36,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        fetchProfile(s.user.id).finally(() => setLoading(false));
-      } else {
+    let mounted = true;
+
+    // Safety timeout: if auth check takes more than 5s, stop loading
+    const timeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn('[Auth] Session check timed out after 5s');
         setLoading(false);
       }
-    });
+    }, 5000);
+
+    // Get initial session
+    supabase.auth.getSession()
+      .then(async ({ data: { session: s }, error }) => {
+        if (!mounted) return;
+        if (error || !s) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+        setSession(s);
+        setUser(s.user);
+        try {
+          await fetchProfile(s.user.id);
+        } catch (e) {
+          console.error('[Auth] Failed to fetch profile:', e);
+        }
+        if (mounted) setLoading(false);
+      })
+      .catch((err) => {
+        console.error('[Auth] getSession failed:', err);
+        if (mounted) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, s) => {
+        if (!mounted) return;
         setSession(s);
         setUser(s?.user ?? null);
         if (s?.user) {
-          await fetchProfile(s.user.id);
+          try {
+            await fetchProfile(s.user.id);
+          } catch (e) {
+            console.error('[Auth] Failed to fetch profile on auth change:', e);
+          }
         } else {
           setProfile(null);
         }
@@ -61,7 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signInWithGoogle = async () => {

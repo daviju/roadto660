@@ -17,6 +17,7 @@ export interface Profile {
   monthly_income: number;
   pay_day: number;
   emergency_fund: number;
+  current_balance: number;
   currency: string;
   theme: 'dark' | 'light' | 'system';
   module_expenses: boolean;

@@ -32,6 +32,11 @@ export const useStore = create<AppState>()(
         sidebarOpen: state.sidebarOpen,
         cachedTheme: state.cachedTheme,
       }),
+      migrate: () => ({
+        currentPage: 'dashboard' as const,
+        sidebarOpen: true,
+        cachedTheme: 'dark' as const,
+      }),
     }
   )
 );

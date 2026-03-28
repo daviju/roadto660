@@ -210,6 +210,15 @@ export function Settings() {
                     <Shield size={10} /> Admin
                   </span>
                 )}
+                {profile?.plan !== 'pro' && (
+                  <motion.button
+                    onClick={() => setPage('pricing')}
+                    className="text-xs px-2 py-0.5 rounded bg-accent-purple/15 text-accent-purple font-medium hover:bg-accent-purple/25 transition-colors"
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Ver planes PRO
+                  </motion.button>
+                )}
               </div>
             </div>
           </div>
@@ -254,7 +263,7 @@ export function Settings() {
         <h3 className="text-sm font-semibold text-th-text">Datos financieros</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <div>
-            <label htmlFor="set-balance" className="block text-xs text-th-muted mb-1.5">Saldo actual</label>
+            <label htmlFor="set-balance" className="block text-xs text-th-muted mb-1.5">Saldo actual en cuenta</label>
             <input id="set-balance" type="number" step="0.01" value={balance} onChange={(e) => setBalance(e.target.value)}
               className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none transition-colors" />
           </div>

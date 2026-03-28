@@ -230,7 +230,15 @@ export function Sidebar() {
                       <Crown size={10} /> PRO
                     </span>
                   ) : (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-th-hover text-th-muted rounded-full">FREE</span>
+                    <>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-th-hover text-th-muted rounded-full">FREE</span>
+                      <button
+                        onClick={() => setPage('pricing')}
+                        className="text-[10px] px-1.5 py-0.5 bg-accent-purple/15 text-accent-purple rounded-full font-medium hover:bg-accent-purple/25 transition-colors"
+                      >
+                        Actualizar
+                      </button>
+                    </>
                   )}
                   {profile.points > 0 && (
                     <span className="text-[10px] text-accent-amber font-medium">{profile.points.toLocaleString('es-ES')} pts</span>

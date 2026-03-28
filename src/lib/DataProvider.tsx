@@ -97,6 +97,8 @@ interface DataContextType {
   updatePhase: (phaseId: string, updates: Partial<Phase>) => void;
   addPhaseItem: (phaseId: string, item: Omit<PhaseItem, 'id'>) => void;
   removePhaseItem: (phaseId: string, itemId: string) => void;
+  addPhase: (name: string, targetDate?: string) => Promise<void>;
+  removePhase: (phaseId: string) => Promise<void>;
 
   // Motorcycles
   setActiveMotorcycle: (id: string) => void;
@@ -158,7 +160,8 @@ function toIncomes(txs: Transaction[], catMap: Map<string, string>): Income[] {
 
 function toBudgets(cats: Category[]): Budget[] {
   return cats
-    .filter((c) => Number(c.monthly_budget) > 0)
+    .filter((c) => c.type === 'expense' || c.type === 'both')
+    .sort((a, b) => a.sort_order - b.sort_order)
     .map((c) => ({ category: c.name, limit: Number(c.monthly_budget) }));
 }
 
@@ -220,7 +223,7 @@ function toMotorcycles(goals: Goal[]): Motorcycle[] {
 }
 
 function buildSettings(
-  profile: { monthly_income?: number; pay_day?: number; emergency_fund?: number; theme?: string } | null,
+  profile: { monthly_income?: number; pay_day?: number; emergency_fund?: number; current_balance?: number; theme?: string } | null,
   cats: Category[],
   extra: ExtraSettings,
 ): AppSettings {
@@ -233,8 +236,13 @@ function buildSettings(
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((c) => c.name);
 
+  // Profile current_balance takes precedence over localStorage snapshot
+  const currentBalance = profile?.current_balance != null && profile.current_balance > 0
+    ? Number(profile.current_balance)
+    : extra.currentBalance;
+
   return {
-    currentBalance: extra.currentBalance,
+    currentBalance,
     emergencyFund: Number(profile?.emergency_fund ?? DEFAULT_SETTINGS.emergencyFund),
     monthlyIncome: Number(profile?.monthly_income ?? DEFAULT_SETTINGS.monthlyIncome),
     cashbackNet: extra.cashbackNet,
@@ -367,6 +375,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (updates.monthlyIncome !== undefined) profileUpdates.monthly_income = updates.monthlyIncome;
       if (updates.payDay !== undefined) profileUpdates.pay_day = updates.payDay;
       if (updates.theme !== undefined) profileUpdates.theme = updates.theme;
+      if (updates.currentBalance !== undefined) profileUpdates.current_balance = updates.currentBalance;
 
       if (Object.keys(profileUpdates).length > 0) {
         updateProfile(profileUpdates);
@@ -844,6 +853,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const addPhase = useCallback(
+    async (name: string, targetDate?: string) => {
+      if (!user) return;
+      const maxSort = dbPhasesRef.current.reduce((max, p) => Math.max(max, p.sort_order), -1);
+      const { data } = await supabase
+        .from('timeline_phases')
+        .insert({
+          user_id: user.id,
+          name,
+          target_date: targetDate || null,
+          sort_order: maxSort + 1,
+        })
+        .select()
+        .single();
+      if (data) setDbPhases((prev) => [...prev, data as TimelinePhase]);
+    },
+    [user],
+  );
+
+  const removePhase = useCallback(
+    async (phaseId: string) => {
+      if (!user) return;
+      await supabase.from('timeline_items').delete().eq('phase_id', phaseId).eq('user_id', user.id);
+      await supabase.from('timeline_phases').delete().eq('id', phaseId).eq('user_id', user.id);
+      setDbPhaseItems((prev) => prev.filter((i) => i.phase_id !== phaseId));
+      setDbPhases((prev) => prev.filter((p) => p.id !== phaseId));
+    },
+    [user],
+  );
+
   // ── CRUD: Motorcycles (stored as goals with category='motorcycle') ──
 
   const setActiveMotorcycle = useCallback(
@@ -1164,6 +1203,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     updatePhase,
     addPhaseItem,
     removePhaseItem,
+    addPhase,
+    removePhase,
 
     setActiveMotorcycle,
     addMotorcycle,

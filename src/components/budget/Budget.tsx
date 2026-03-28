@@ -134,12 +134,13 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
           </AnimatePresence>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-mono">
+          <span className="text-sm font-mono flex items-center gap-1">
             <span className={isOver ? 'text-accent-red' : isWarning ? 'text-accent-amber' : 'text-th-text'}>{formatCurrency(spent)}</span>
             <span className="text-th-muted"> / </span>
-            <input type="number" step="1" min="0" value={budget.limit}
+            <input type="number" step="1" min="0" value={budget.limit || ''}
               onChange={(e) => updateBudget(budget.category, parseFloat(e.target.value) || 0)}
-              className="w-16 md:w-20 bg-transparent border-b border-th-border-strong text-right text-sm text-th-secondary font-mono focus:border-accent-amber focus:text-th-text focus:outline-none transition-colors"
+              placeholder="—"
+              className="w-16 md:w-20 bg-transparent border-b border-th-border-strong text-right text-sm text-th-secondary font-mono focus:border-accent-amber focus:text-th-text focus:outline-none transition-colors placeholder:text-th-faint"
               aria-label={`Limite para ${budget.category}`} />
           </span>
           <motion.button onClick={() => deleteBudget(budget.category)}
@@ -154,7 +155,9 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
           initial={{ width: 0 }} animate={isInView ? { width: `${Math.min(100, pct * 100)}%` } : { width: 0 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 + index * 0.05 }} />
       </div>
-      {budget.limit > 0 && (
+      {budget.limit === 0 ? (
+        <p className="mt-2 text-xs text-th-faint italic">Sin presupuesto — toca el campo para asignar</p>
+      ) : (
         <div className="flex justify-between mt-2 text-xs text-th-muted">
           <span>{Math.round(pct * 100)}% usado</span>
           <span>{isOver ? `${formatCurrency(spent - budget.limit)} excedido` : `${formatCurrency(budget.limit - spent)} restante`}</span>

@@ -60,29 +60,47 @@ export function Goals() {
 
   // Fetch goals and recent transactions
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 5000);
 
     const fetchData = async () => {
       setLoading(true);
-      const [goalsRes, txRes] = await Promise.all([
-        supabase
-          .from('goals')
-          .select('*, items:goal_items(*)')
-          .eq('user_id', user.id)
-          .order('created_at'),
-        supabase
-          .from('transactions')
-          .select('*, category:categories(*)')
-          .eq('user_id', user.id)
-          .order('transaction_date', { ascending: false })
-          .limit(500),
-      ]);
-      if (goalsRes.data) setGoals(goalsRes.data);
-      if (txRes.data) setTransactions(txRes.data);
-      setLoading(false);
+      try {
+        const [goalsRes, txRes] = await Promise.all([
+          supabase
+            .from('goals')
+            .select('*, items:goal_items(*)')
+            .eq('user_id', user.id)
+            .order('created_at'),
+          supabase
+            .from('transactions')
+            .select('*, category:categories(*)')
+            .eq('user_id', user.id)
+            .order('transaction_date', { ascending: false })
+            .limit(500),
+        ]);
+        if (cancelled) return;
+        if (goalsRes.data) setGoals(goalsRes.data);
+        if (txRes.data) setTransactions(txRes.data);
+      } catch (err) {
+        console.error('[Goals] fetch failed:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
 
     fetchData();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, [user]);
 
   // ─── Derived data ────────────────────────────────────────
