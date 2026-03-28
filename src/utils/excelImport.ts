@@ -1,166 +1,170 @@
 import * as XLSX from 'xlsx';
-import { categorize } from './categorize';
-import { generateId, todayISO } from './format';
-import type { Expense, Income } from '../types';
+import { bankParsers } from '../lib/excel-parsers';
+import type { RawTransaction, ParseResult, ParseError } from '../lib/excel-parsers';
+import { supabase } from '../lib/supabase';
 
-export interface ParsedMovement {
-  date: string;
-  concepto: string;
-  movimiento: string;
-  importe: number;
-  disponible: number;
-  categoria: string | null;
-  tipo: 'ingreso' | 'gasto';
-  isDuplicate: boolean;
-}
+// ─── Public types ─────────────────────────────────────────────
 
-export interface ImportError {
-  row: number;
-  reason: string;
-}
+export type { RawTransaction, ParseError };
 
 export interface ImportSummary {
-  movements: ParsedMovement[];
-  newExpenses: number;
-  newIncomes: number;
-  duplicates: number;
-  uncategorized: number;
-  errors: ImportError[];
+  bankId: string;
+  all: RawTransaction[];
+  newOnes: RawTransaction[];
+  duplicates: RawTransaction[];
+  errors: ParseError[];
+  totalRows: number;
+  skippedRows: number;
 }
 
-function parseSpanishDate(dateStr: string): string {
-  if (!dateStr) return todayISO();
-  // Handle DD/MM/YYYY format
-  const parts = dateStr.split('/');
-  if (parts.length === 3) {
-    const [day, month, year] = parts;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  // Try parsing as Date object (Excel serial number)
-  if (typeof dateStr === 'number') {
-    const date = XLSX.SSF.parse_date_code(dateStr as number);
-    return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
-  }
-  return todayISO();
-}
+// ─── Step 1: Read Excel into raw rows ─────────────────────────
 
-export function parseExcelFile(
-  buffer: ArrayBuffer,
-  existingExpenses: Expense[],
-  existingIncomes: Income[]
-): ImportSummary {
+export function readExcelRows(buffer: ArrayBuffer): unknown[][] {
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, {
-    header: 1,
-    raw: false,
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,     // array of arrays, not objects
+    defval: null,  // empty cells as null
+    raw: true,     // keep numbers as numbers
   });
+  return rows;
+}
 
-  // Find the header row (contains "Concepto" or "F.Valor")
-  let headerIdx = 3; // Default: row 4 (0-indexed 3)
-  for (let i = 0; i < Math.min(10, rows.length); i++) {
-    const row = rows[i];
-    if (row && row.some((cell) => String(cell).toLowerCase().includes('concepto'))) {
-      headerIdx = i;
-      break;
+// ─── Step 2: Validate format matches bank ─────────────────────
+
+export function validateBankFormat(bankId: string, rows: unknown[][]): boolean {
+  const parser = bankParsers[bankId];
+  if (!parser) return false;
+  return parser.validate(rows);
+}
+
+// ─── Step 3: Parse rows into transactions ─────────────────────
+
+export function parseBank(bankId: string, rows: unknown[][]): ParseResult {
+  const parser = bankParsers[bankId];
+  if (!parser) {
+    return { transactions: [], errors: [{ row: 0, reason: `Parser no encontrado para ${bankId}` }], totalRows: 0 };
+  }
+  return parser.parse(rows);
+}
+
+// ─── Step 4: Duplicate detection against Supabase ─────────────
+
+export async function checkDuplicates(
+  userId: string,
+  transactions: RawTransaction[],
+): Promise<{ newOnes: RawTransaction[]; duplicates: RawTransaction[] }> {
+  // Fetch existing transactions for this user
+  const { data: existing, error } = await supabase
+    .from('transactions')
+    .select('transaction_date, amount, concept')
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error fetching existing transactions for dedup:', error);
+    // If we can't check, treat all as new (safer than blocking import)
+    return { newOnes: transactions, duplicates: [] };
+  }
+
+  const existingSet = new Set(
+    (existing || []).map(
+      (t: { transaction_date: string; amount: number; concept: string }) =>
+        `${t.transaction_date}|${Number(t.amount).toFixed(2)}|${(t.concept || '').trim().toLowerCase()}`
+    ),
+  );
+
+  const newOnes: RawTransaction[] = [];
+  const duplicates: RawTransaction[] = [];
+
+  for (const t of transactions) {
+    const key = `${t.transaction_date}|${t.amount.toFixed(2)}|${t.concept.trim().toLowerCase()}`;
+    if (existingSet.has(key)) {
+      duplicates.push(t);
+    } else {
+      newOnes.push(t);
     }
   }
 
-  const dataRows = rows.slice(headerIdx + 1);
-  const movements: ParsedMovement[] = [];
-  const errors: ImportError[] = [];
+  return { newOnes, duplicates };
+}
 
-  // Build a set of existing movement signatures for duplicate detection
-  const existingKeys = new Set<string>();
-  for (const e of existingExpenses) {
-    existingKeys.add(`${e.date}|${e.amount.toFixed(2)}|${e.description}`);
+// ─── Step 5: Build full ImportSummary (parse + dedup) ─────────
+
+export async function buildImportSummary(
+  bankId: string,
+  buffer: ArrayBuffer,
+  userId: string,
+): Promise<ImportSummary> {
+  // 1. Read
+  const rows = readExcelRows(buffer);
+  console.log(`[Import] Total filas leidas del archivo: ${rows.length}`);
+
+  // 2. Validate
+  if (!validateBankFormat(bankId, rows)) {
+    throw new Error(
+      `Este archivo no parece ser un extracto de ${bankParsers[bankId]?.bankName ?? bankId}. ` +
+      'Comprueba que has seleccionado el banco correcto y que el archivo es el Excel de movimientos descargado desde tu banca online.'
+    );
   }
-  for (const i of existingIncomes) {
-    existingKeys.add(`${i.date}|${Math.abs(i.amount).toFixed(2)}|${i.description}`);
+
+  // 3. Parse
+  const result = parseBank(bankId, rows);
+  console.log(`[Import] Parseadas: ${result.transactions.length}, Errores: ${result.errors.length}`);
+
+  if (result.transactions.length === 0 && result.errors.length === 0) {
+    throw new Error('El archivo no contiene movimientos. Comprueba que has descargado el extracto correcto.');
   }
 
-  for (let ri = 0; ri < dataRows.length; ri++) {
-    const row = dataRows[ri];
-    const rowNum = headerIdx + 2 + ri; // 1-indexed for user display
-    if (!row || row.length < 6) continue;
-
-    // Columns: [empty/idx, F.Valor, Fecha, Concepto, Movimiento, Importe, Divisa, Disponible, ...]
-    const fechaRaw = String(row[2] ?? row[1] ?? '');
-    const concepto = String(row[3] ?? '');
-    const movimiento = String(row[4] ?? '');
-    const importeRaw = row[5];
-
-    if (!fechaRaw) { errors.push({ row: rowNum, reason: 'Fecha vacia' }); continue; }
-    if (!importeRaw) { errors.push({ row: rowNum, reason: 'Importe vacio' }); continue; }
-
-    const date = parseSpanishDate(fechaRaw);
-    let importe = typeof importeRaw === 'number'
-      ? importeRaw
-      : parseFloat(String(importeRaw).replace(/\./g, '').replace(',', '.'));
-
-    if (isNaN(importe)) { errors.push({ row: rowNum, reason: 'Importe no valido' }); continue; }
-
-    const { categoria, tipo } = categorize(concepto, movimiento, importe);
-
-    const absAmount = Math.abs(importe);
-    const desc = movimiento || concepto;
-    const key = `${date}|${absAmount.toFixed(2)}|${desc}`;
-    const isDuplicate = existingKeys.has(key);
-
-    movements.push({
-      date,
-      concepto,
-      movimiento,
-      importe,
-      disponible: typeof row[7] === 'number' ? row[7] : parseFloat(String(row[7] ?? '0').replace(/\./g, '').replace(',', '.')) || 0,
-      categoria,
-      tipo,
-      isDuplicate,
-    });
-  }
+  // 4. Dedup
+  const { newOnes, duplicates } = await checkDuplicates(userId, result.transactions);
+  console.log(`[Import] Nuevos: ${newOnes.length}, Duplicados: ${duplicates.length}`);
 
   return {
-    movements,
-    newExpenses: movements.filter((m) => m.tipo === 'gasto' && !m.isDuplicate).length,
-    newIncomes: movements.filter((m) => m.tipo === 'ingreso' && !m.isDuplicate).length,
-    duplicates: movements.filter((m) => m.isDuplicate).length,
-    uncategorized: movements.filter((m) => !m.categoria && !m.isDuplicate).length,
-    errors,
+    bankId,
+    all: result.transactions,
+    newOnes,
+    duplicates,
+    errors: result.errors,
+    totalRows: result.totalRows,
+    skippedRows: result.errors.length,
   };
 }
 
-export function movementsToRecords(
-  movements: ParsedMovement[]
-): { expenses: Expense[]; incomes: Income[] } {
-  const expenses: Expense[] = [];
-  const incomes: Income[] = [];
-  const now = todayISO();
+// ─── Step 6: Insert into Supabase ─────────────────────────────
 
-  for (const m of movements) {
-    if (m.isDuplicate) continue;
+export async function insertTransactions(
+  userId: string,
+  transactions: RawTransaction[],
+  categoryMap: Map<string, string>,
+): Promise<{ inserted: number; failed: number }> {
+  if (transactions.length === 0) return { inserted: 0, failed: 0 };
 
-    const desc = m.movimiento || m.concepto;
+  const records = transactions.map((t) => ({
+    user_id: userId,
+    amount: t.amount,
+    type: t.type,
+    concept: t.concept,
+    transaction_date: t.transaction_date,
+    source: 'excel_import' as const,
+    original_concept: t.original_concept,
+    category_id: categoryMap.get(t.concept.toLowerCase()) || null,
+  }));
 
-    if (m.tipo === 'gasto') {
-      expenses.push({
-        id: generateId(),
-        date: m.date,
-        amount: Math.abs(m.importe),
-        category: m.categoria || `_temp_${desc.substring(0, 30)}`,
-        description: desc,
-        createdAt: now,
-      });
+  // Insert in batches of 100 to avoid payload limits
+  let inserted = 0;
+  let failed = 0;
+  const BATCH = 100;
+
+  for (let i = 0; i < records.length; i += BATCH) {
+    const batch = records.slice(i, i + BATCH);
+    const { error } = await supabase.from('transactions').insert(batch);
+    if (error) {
+      console.error(`[Import] Batch insert error (rows ${i}-${i + batch.length}):`, error);
+      failed += batch.length;
     } else {
-      incomes.push({
-        id: generateId(),
-        date: m.date,
-        amount: m.importe,
-        concept: m.categoria || 'Otros',
-        description: desc,
-        createdAt: now,
-      });
+      inserted += batch.length;
     }
   }
 
-  return { expenses, incomes };
+  return { inserted, failed };
 }

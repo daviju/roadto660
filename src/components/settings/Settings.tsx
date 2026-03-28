@@ -7,15 +7,14 @@ import { supabase } from '../../lib/supabase';
 import { useToast } from '../shared/Toast';
 import { formatCurrency } from '../../utils/format';
 import { staggerContainer, fadeUp, scaleFade } from '../../utils/animations';
-import { parseExcelFile, movementsToRecords } from '../../utils/excelImport';
-import type { ImportSummary } from '../../utils/excelImport';
+import { ExcelImportFlow } from '../shared/ExcelImportFlow';
 
 export function Settings() {
-  const { settings, updateSettings, exportData, importData, resetData, expenses, incomes, addExpenses, addIncomes, setPage } = useAppData();
+  const { settings, updateSettings, exportData, importData, resetData, setPage } = useAppData();
   const { profile, session, signOut } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const excelInputRef = useRef<HTMLInputElement>(null);
+  const [showExcelImport, setShowExcelImport] = useState(false);
 
   const [balance, setBalance] = useState(settings.currentBalance.toString());
   const [emergency, setEmergency] = useState(settings.emergencyFund.toString());
@@ -32,10 +31,7 @@ export function Settings() {
   const [payDayInput, setPayDayInput] = useState(settings.payDay.toString());
   const [cycleModeInput, setCycleModeInput] = useState(settings.cycleMode);
 
-  // Excel import state
-  const [excelSummary, setExcelSummary] = useState<ImportSummary | null>(null);
-  const [excelImporting, setExcelImporting] = useState(false);
-  const [excelMsg, setExcelMsg] = useState('');
+  // (Excel import handled by ExcelImportFlow component)
 
   // RGPD
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -97,47 +93,7 @@ export function Settings() {
     setPendingImportJson('');
   };
 
-  const handleExcelSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const buffer = ev.target?.result as ArrayBuffer;
-        const summary = parseExcelFile(buffer, expenses, incomes);
-        setExcelSummary(summary);
-      } catch {
-        setExcelMsg('Error al leer el archivo Excel');
-        setTimeout(() => setExcelMsg(''), 3000);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    if (excelInputRef.current) excelInputRef.current.value = '';
-  };
-
-  const handleConfirmExcel = async () => {
-    if (!excelSummary) return;
-    const totalNew = excelSummary.newExpenses + excelSummary.newIncomes;
-
-    if (totalNew === 0) {
-      toast.info('Todos los registros del archivo ya estan en tu cuenta. No se ha importado nada.');
-      setExcelSummary(null);
-      return;
-    }
-
-    setExcelImporting(true);
-    try {
-      const { expenses: newExp, incomes: newInc } = movementsToRecords(excelSummary.movements);
-      if (newExp.length > 0) await addExpenses(newExp);
-      if (newInc.length > 0) await addIncomes(newInc);
-      const dupeMsg = excelSummary.duplicates > 0 ? ` ${excelSummary.duplicates} duplicados descartados.` : '';
-      toast.success(`Importacion completada: ${newExp.length + newInc.length} registros nuevos.${dupeMsg}`);
-    } catch {
-      toast.error('Error al importar: no se pudieron guardar los registros. Intentalo de nuevo.');
-    }
-    setExcelSummary(null);
-    setExcelImporting(false);
-  };
+  // (Excel import logic moved to ExcelImportFlow component)
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== 'ELIMINAR' || !session?.access_token) return;
@@ -455,13 +411,12 @@ export function Settings() {
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Upload size={14} /> Importar JSON
           </motion.button>
-          <motion.button onClick={() => excelInputRef.current?.click()}
+          <motion.button onClick={() => setShowExcelImport(true)}
             className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-accent-green/15 text-accent-green rounded-xl text-xs sm:text-sm font-medium hover:bg-accent-green/25 transition-colors"
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <FileSpreadsheet size={14} /> Importar Excel
           </motion.button>
           <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileSelect} className="hidden" />
-          <input ref={excelInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelSelect} className="hidden" />
           <motion.button onClick={() => setShowConfirmReset(true)}
             className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-accent-red/15 text-accent-red rounded-xl text-xs sm:text-sm font-medium hover:bg-accent-red/25 transition-colors"
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -469,87 +424,21 @@ export function Settings() {
           </motion.button>
         </div>
         <AnimatePresence>
-          {(importMsg || excelMsg) && (
+          {importMsg && (
             <motion.p
-              className={`text-sm ${(importMsg || excelMsg).includes('Error') ? 'text-accent-red' : 'text-accent-green'}`}
+              className={`text-sm ${importMsg.includes('Error') ? 'text-accent-red' : 'text-accent-green'}`}
               initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              {importMsg || excelMsg}
+              {importMsg}
             </motion.p>
           )}
         </AnimatePresence>
       </motion.div>
 
-      {/* Excel Import Summary Modal */}
-      <AnimatePresence>
-        {excelSummary && (
-          <motion.div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setExcelSummary(null)}>
-            <motion.div
-              className="bg-th-card rounded-xl p-5 md:p-6 border border-th-border-strong max-w-md w-full space-y-4"
-              variants={scaleFade} initial="initial" animate="animate" exit="exit"
-              onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-semibold text-th-text flex items-center gap-2">
-                <FileSpreadsheet size={20} className="text-accent-green" /> Resumen de importacion
-              </h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-th-secondary">Total movimientos</span>
-                  <span className="font-mono text-th-text">{excelSummary.movements.length}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-th-secondary">Nuevos gastos</span>
-                  <span className="font-mono text-accent-red">{excelSummary.newExpenses}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-th-secondary">Nuevos ingresos</span>
-                  <span className="font-mono text-accent-green">{excelSummary.newIncomes}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-th-secondary">Duplicados (omitidos)</span>
-                  <span className="font-mono text-th-muted">{excelSummary.duplicates}</span>
-                </div>
-                {excelSummary.uncategorized > 0 && (
-                  <div className="flex justify-between text-sm items-center">
-                    <span className="text-accent-amber flex items-center gap-1">
-                      <AlertTriangle size={12} /> Sin categorizar
-                    </span>
-                    <span className="font-mono text-accent-amber">{excelSummary.uncategorized}</span>
-                  </div>
-                )}
-                {excelSummary.errors.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm items-center">
-                      <span className="text-accent-red flex items-center gap-1">
-                        <X size={12} /> Errores
-                      </span>
-                      <span className="font-mono text-accent-red">{excelSummary.errors.length}</span>
-                    </div>
-                    <div className="text-xs text-th-muted space-y-0.5 max-h-20 overflow-y-auto">
-                      {excelSummary.errors.slice(0, 5).map((err, i) => (
-                        <p key={i}>Fila {err.row}: {err.reason}</p>
-                      ))}
-                      {excelSummary.errors.length > 5 && <p>...y {excelSummary.errors.length - 5} mas</p>}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-3 justify-end pt-2">
-                <motion.button onClick={() => setExcelSummary(null)}
-                  className="px-4 py-2 text-sm text-th-secondary hover:text-th-text transition-colors"
-                  whileTap={{ scale: 0.95 }}>
-                  Cancelar
-                </motion.button>
-                <motion.button onClick={handleConfirmExcel} disabled={excelImporting}
-                  className="flex items-center gap-2 px-4 py-2 bg-accent-green text-white rounded-lg text-sm font-medium hover:bg-accent-green/80 transition-colors disabled:opacity-50"
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-                  <Check size={14} /> Importar {excelSummary.newExpenses + excelSummary.newIncomes} registros
-                </motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Excel Import Flow */}
+      <ExcelImportFlow
+        open={showExcelImport}
+        onClose={() => setShowExcelImport(false)}
+      />
 
       {/* Confirm Reset Modal */}
       <AnimatePresence>

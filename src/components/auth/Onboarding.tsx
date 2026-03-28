@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, DollarSign, Calendar, ToggleLeft, ToggleRight,
@@ -6,9 +6,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
-import { parseExcelFile, movementsToRecords } from '../../utils/excelImport';
 import { fadeUp, buttonTap, staggerContainer, fadeUpSmall } from '../../utils/animations';
 import { useToast } from '../shared/Toast';
+import { ExcelImportFlow } from '../shared/ExcelImportFlow';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Supermercado', slug: 'supermercado', color: '#34d399', icon: 'shopping-cart', budget: 250 },
@@ -64,8 +64,8 @@ export function Onboarding() {
   const [newCatName, setNewCatName] = useState('');
 
   // Step 4
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [importResult, setImportResult] = useState<string | null>(null);
+  const [showImportFlow, setShowImportFlow] = useState(false);
+  const [importDone, setImportDone] = useState(false);
 
   const toggleModule = (key: string) => {
     setModules((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -91,58 +91,9 @@ export function Onboarding() {
     setNewCatName('');
   };
 
-  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    try {
-      const buffer = await file.arrayBuffer();
-      const summary = parseExcelFile(buffer, [], []);
-      const { expenses, incomes } = movementsToRecords(summary.movements);
-
-      const cats = await supabase.from('categories').select('*').eq('user_id', user.id);
-      const catMap = new Map((cats.data || []).map((c: { slug: string; id: string }) => [c.slug, c.id]));
-
-      const txs = [
-        ...expenses.map((exp) => ({
-          user_id: user.id,
-          amount: exp.amount,
-          type: 'expense' as const,
-          concept: exp.description,
-          transaction_date: exp.date,
-          source: 'excel_import' as const,
-          original_concept: exp.description,
-          category_id: catMap.get(exp.category.toLowerCase().replace(/[\s/]+/g, '-')) || null,
-        })),
-        ...incomes.map((inc) => ({
-          user_id: user.id,
-          amount: inc.amount,
-          type: 'income' as const,
-          concept: inc.description,
-          transaction_date: inc.date,
-          source: 'excel_import' as const,
-          original_concept: inc.description,
-          category_id: null,
-        })),
-      ];
-
-      if (txs.length > 0) {
-        const { error } = await supabase.from('transactions').insert(txs);
-        if (error) {
-          console.error('Excel import insert error:', error);
-          toast.warning('No se pudo importar el Excel, podras hacerlo despues en Configuracion');
-          return;
-        }
-      }
-
-      setImportResult(
-        `Importados: ${summary.newExpenses} gastos, ${summary.newIncomes} ingresos. ${summary.duplicates} duplicados omitidos.`
-      );
-      toast.success('Excel importado correctamente');
-    } catch (err) {
-      console.error('Excel import error:', err);
-      toast.warning('No se pudo importar el Excel, podras hacerlo despues en Configuracion');
-    }
+  const handleImportComplete = () => {
+    setImportDone(true);
+    setShowImportFlow(false);
   };
 
   const finish = async () => {
@@ -471,31 +422,29 @@ export function Onboarding() {
 
                 <div className="space-y-4">
                   <motion.button
-                    onClick={() => fileRef.current?.click()}
-                    className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-accent-purple/30 hover:border-accent-purple/60 hover:bg-accent-purple/5 transition-colors text-left"
+                    onClick={() => setShowImportFlow(true)}
+                    disabled={importDone}
+                    className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-accent-purple/30 hover:border-accent-purple/60 hover:bg-accent-purple/5 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     {...buttonTap}
                   >
                     <Upload size={24} className="text-accent-purple flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-th-text">Importar Excel de mi banco</p>
-                      <p className="text-xs text-th-muted">BBVA, Unicaja, etc. (archivo .xlsx)</p>
+                      <p className="text-sm font-medium text-th-text">
+                        {importDone ? 'Excel importado correctamente' : 'Importar Excel de mi banco'}
+                      </p>
+                      <p className="text-xs text-th-muted">
+                        {importDone ? 'Tus movimientos ya estan cargados' : 'BBVA y mas bancos (archivo .xlsx)'}
+                      </p>
                     </div>
                   </motion.button>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleExcelImport}
-                    className="hidden"
-                  />
 
-                  {importResult && (
+                  {importDone && (
                     <motion.div
-                      className="p-3 bg-accent-green/10 border border-accent-green/20 rounded-xl text-sm text-accent-green"
+                      className="p-3 bg-accent-green/10 border border-accent-green/20 rounded-xl text-sm text-accent-green flex items-center gap-2"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                     >
-                      {importResult}
+                      <Check size={14} /> Movimientos importados correctamente
                     </motion.div>
                   )}
 
@@ -557,6 +506,13 @@ export function Onboarding() {
           </div>
         </div>
       </motion.div>
+
+      {/* Excel import flow modal */}
+      <ExcelImportFlow
+        open={showImportFlow}
+        onClose={() => setShowImportFlow(false)}
+        onComplete={handleImportComplete}
+      />
     </div>
   );
 }
