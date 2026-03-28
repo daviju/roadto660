@@ -8,6 +8,7 @@ import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 import { parseExcelFile, movementsToRecords } from '../../utils/excelImport';
 import { fadeUp, buttonTap, staggerContainer, fadeUpSmall } from '../../utils/animations';
+import { useToast } from '../shared/Toast';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Supermercado', slug: 'supermercado', color: '#34d399', icon: 'shopping-cart', budget: 250 },
@@ -37,6 +38,7 @@ const MODULES = [
 
 export function Onboarding() {
   const { user, updateProfile } = useAuth();
+  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [showCustomCategories, setShowCustomCategories] = useState(false);
@@ -91,96 +93,130 @@ export function Onboarding() {
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const buffer = await file.arrayBuffer();
-    const summary = parseExcelFile(buffer, [], []);
-    const { expenses, incomes } = movementsToRecords(summary.movements);
+    if (!file || !user) return;
 
-    if (!user) return;
-    // Insert categories first, then transactions
-    const cats = await supabase.from('categories').select('*').eq('user_id', user.id);
-    const catMap = new Map((cats.data || []).map((c: { slug: string; id: string }) => [c.slug, c.id]));
+    try {
+      const buffer = await file.arrayBuffer();
+      const summary = parseExcelFile(buffer, [], []);
+      const { expenses, incomes } = movementsToRecords(summary.movements);
 
-    const txs = [
-      ...expenses.map((exp) => ({
-        user_id: user.id,
-        amount: exp.amount,
-        type: 'expense' as const,
-        concept: exp.description,
-        transaction_date: exp.date,
-        source: 'excel_import' as const,
-        original_concept: exp.description,
-        category_id: catMap.get(exp.category.toLowerCase().replace(/[\s/]+/g, '-')) || null,
-      })),
-      ...incomes.map((inc) => ({
-        user_id: user.id,
-        amount: inc.amount,
-        type: 'income' as const,
-        concept: inc.description,
-        transaction_date: inc.date,
-        source: 'excel_import' as const,
-        original_concept: inc.description,
-        category_id: null,
-      })),
-    ];
+      const cats = await supabase.from('categories').select('*').eq('user_id', user.id);
+      const catMap = new Map((cats.data || []).map((c: { slug: string; id: string }) => [c.slug, c.id]));
 
-    if (txs.length > 0) {
-      await supabase.from('transactions').insert(txs);
+      const txs = [
+        ...expenses.map((exp) => ({
+          user_id: user.id,
+          amount: exp.amount,
+          type: 'expense' as const,
+          concept: exp.description,
+          transaction_date: exp.date,
+          source: 'excel_import' as const,
+          original_concept: exp.description,
+          category_id: catMap.get(exp.category.toLowerCase().replace(/[\s/]+/g, '-')) || null,
+        })),
+        ...incomes.map((inc) => ({
+          user_id: user.id,
+          amount: inc.amount,
+          type: 'income' as const,
+          concept: inc.description,
+          transaction_date: inc.date,
+          source: 'excel_import' as const,
+          original_concept: inc.description,
+          category_id: null,
+        })),
+      ];
+
+      if (txs.length > 0) {
+        const { error } = await supabase.from('transactions').insert(txs);
+        if (error) {
+          console.error('Excel import insert error:', error);
+          toast.warning('No se pudo importar el Excel, podras hacerlo despues en Configuracion');
+          return;
+        }
+      }
+
+      setImportResult(
+        `Importados: ${summary.newExpenses} gastos, ${summary.newIncomes} ingresos. ${summary.duplicates} duplicados omitidos.`
+      );
+      toast.success('Excel importado correctamente');
+    } catch (err) {
+      console.error('Excel import error:', err);
+      toast.warning('No se pudo importar el Excel, podras hacerlo despues en Configuracion');
     }
-
-    setImportResult(
-      `Importados: ${summary.newExpenses} gastos, ${summary.newIncomes} ingresos. ${summary.duplicates} duplicados omitidos.`
-    );
   };
 
   const finish = async () => {
     if (!user) return;
     setSaving(true);
 
-    // Save profile
-    await updateProfile({
-      full_name: fullName,
-      monthly_income: parseFloat(monthlyIncome) || 0,
-      pay_day: payDay,
-      currency,
-      ...modules,
-      onboarding_completed: true,
-    } as Partial<any>);
+    try {
+      // 1. Insert categories first (non-blocking — errors won't trap the user)
+      try {
+        const catsToInsert = DEFAULT_CATEGORIES.filter((c) => enabledCats.has(c.slug)).map(
+          (c, i) => ({
+            user_id: user.id,
+            name: c.name,
+            slug: c.slug,
+            color: c.color,
+            icon: c.icon,
+            monthly_budget: catBudgets[c.slug] || 0,
+            sort_order: i,
+            type: 'expense' as const,
+          })
+        );
 
-    // Create enabled categories
-    const catsToInsert = DEFAULT_CATEGORIES.filter((c) => enabledCats.has(c.slug)).map(
-      (c, i) => ({
-        user_id: user.id,
-        name: c.name,
-        slug: c.slug,
-        color: c.color,
-        icon: c.icon,
-        monthly_budget: catBudgets[c.slug] || 0,
-        sort_order: i,
-        type: 'expense' as const,
-      })
-    );
+        const incomeCats = [
+          { name: 'Nomina', slug: 'nomina', color: '#34d399', icon: 'banknote' },
+          { name: 'Cashback', slug: 'cashback', color: '#60a5fa', icon: 'coins' },
+          { name: 'Devolucion', slug: 'devolucion', color: '#fbbf24', icon: 'undo-2' },
+          { name: 'Otros ingresos', slug: 'otros-ingresos', color: '#94a3b8', icon: 'circle' },
+        ].map((c, i) => ({
+          user_id: user.id,
+          name: c.name,
+          slug: c.slug,
+          color: c.color,
+          icon: c.icon,
+          monthly_budget: 0,
+          sort_order: catsToInsert.length + i,
+          type: 'income' as const,
+        }));
 
-    // Also add income categories
-    const incomeCats = [
-      { name: 'Nomina', slug: 'nomina', color: '#34d399', icon: 'banknote' },
-      { name: 'Cashback', slug: 'cashback', color: '#60a5fa', icon: 'coins' },
-      { name: 'Devolucion', slug: 'devolucion', color: '#fbbf24', icon: 'undo-2' },
-      { name: 'Otros ingresos', slug: 'otros-ingresos', color: '#94a3b8', icon: 'circle' },
-    ].map((c, i) => ({
-      user_id: user.id,
-      name: c.name,
-      slug: c.slug,
-      color: c.color,
-      icon: c.icon,
-      monthly_budget: 0,
-      sort_order: catsToInsert.length + i,
-      type: 'income' as const,
-    }));
+        const { error: catError } = await supabase.from('categories').insert([...catsToInsert, ...incomeCats]);
+        if (catError) {
+          console.error('Error inserting categories:', catError);
+          toast.error('No se pudieron crear las categorias, podras añadirlas en Ajustes');
+        }
+      } catch (catErr) {
+        console.error('Categories insert exception:', catErr);
+        toast.error('No se pudieron crear las categorias, podras añadirlas en Ajustes');
+      }
 
-    await supabase.from('categories').insert([...catsToInsert, ...incomeCats]);
+      // 2. Save profile + mark onboarding complete (always, even if categories failed)
+      await updateProfile({
+        full_name: fullName,
+        monthly_income: parseFloat(monthlyIncome) || 0,
+        pay_day: payDay,
+        currency,
+        ...modules,
+        onboarding_completed: true,
+      } as Partial<any>);
+    } catch (err) {
+      console.error('Onboarding finish error:', err);
 
-    setSaving(false);
+      // Last resort: force-set onboarding_completed so user isn't trapped
+      try {
+        await supabase
+          .from('profiles')
+          .update({ onboarding_completed: true })
+          .eq('id', user.id);
+      } catch (forceErr) {
+        console.error('Force onboarding_completed failed:', forceErr);
+      }
+
+      toast.error('Hubo un error al guardar. Puedes ajustar todo en Configuracion.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const canProceed = () => {
