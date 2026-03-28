@@ -7,6 +7,7 @@ export interface RawTransaction {
   amount: number;             // Always positive
   type: 'income' | 'expense';
   source: 'excel_import';
+  categorySlug: string;       // Slug from categorization (e.g. 'comer-fuera', '_temporal')
 }
 
 export interface ParseError {

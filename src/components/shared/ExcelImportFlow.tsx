@@ -12,7 +12,6 @@ import {
   insertTransactions,
   type ImportSummary,
 } from '../../utils/excelImport';
-import { supabase } from '../../lib/supabase';
 import { scaleFade, buttonTap } from '../../utils/animations';
 
 type FlowStep = 'bank' | 'parsing' | 'summary' | 'inserting';
@@ -136,18 +135,8 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
     setStep('inserting');
 
     try {
-      // Build category map from user's categories
-      const { data: cats } = await supabase
-        .from('categories')
-        .select('id, slug')
-        .eq('user_id', user.id);
-
-      const catMap = new Map<string, string>();
-      (cats || []).forEach((c: { id: string; slug: string }) => {
-        catMap.set(c.slug, c.id);
-      });
-
-      const { inserted, failed } = await insertTransactions(user.id, summary.newOnes, catMap);
+      // insertTransactions now handles category creation internally
+      const { inserted, failed } = await insertTransactions(user.id, summary.newOnes);
 
       if (failed === 0) {
         const dupeMsg = summary.duplicates.length > 0

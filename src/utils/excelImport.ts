@@ -130,15 +130,98 @@ export async function buildImportSummary(
   };
 }
 
-// ─── Step 6: Insert into Supabase ─────────────────────────────
+// ─── Default category metadata (color/icon) for auto-creation ─
+
+const CATEGORY_DEFAULTS: Record<string, { name: string; color: string; icon: string; type: 'expense' | 'income' }> = {
+  'supermercado':   { name: 'Supermercado',    color: '#34d399', icon: 'shopping-cart', type: 'expense' },
+  'comer-fuera':    { name: 'Comer fuera',     color: '#fbbf24', icon: 'utensils',      type: 'expense' },
+  'suscripciones':  { name: 'Suscripciones',   color: '#60a5fa', icon: 'credit-card',   type: 'expense' },
+  'combustible':    { name: 'Combustible',      color: '#fb923c', icon: 'fuel',           type: 'expense' },
+  'tabaco-vaper':   { name: 'Tabaco/Vaper',    color: '#f87171', icon: 'cigarette',      type: 'expense' },
+  'vending':        { name: 'Vending',          color: '#ef4444', icon: 'coffee',         type: 'expense' },
+  'salud':          { name: 'Salud',            color: '#34d399', icon: 'heart-pulse',    type: 'expense' },
+  'ropa':           { name: 'Ropa',             color: '#a78bfa', icon: 'shirt',          type: 'expense' },
+  'compras':        { name: 'Compras',          color: '#a78bfa', icon: 'shopping-bag',   type: 'expense' },
+  'gaming':         { name: 'Gaming',           color: '#8b5cf6', icon: 'gamepad-2',      type: 'expense' },
+  'regalos':        { name: 'Regalos',          color: '#c084fc', icon: 'gift',           type: 'expense' },
+  'transporte':     { name: 'Transporte',       color: '#fb923c', icon: 'car',            type: 'expense' },
+  'seguros':        { name: 'Seguros',          color: '#94a3b8', icon: 'shield',         type: 'expense' },
+  'cashback':       { name: 'Cashback',         color: '#60a5fa', icon: 'coins',          type: 'income' },
+  'nomina':         { name: 'Nomina',           color: '#34d399', icon: 'banknote',       type: 'income' },
+  'devolucion':     { name: 'Devolucion',       color: '#fbbf24', icon: 'undo-2',         type: 'income' },
+  'otros-ingresos': { name: 'Otros ingresos',   color: '#94a3b8', icon: 'circle',         type: 'income' },
+};
+
+// ─── Step 6: Ensure categories exist, then insert ─────────────
 
 export async function insertTransactions(
   userId: string,
   transactions: RawTransaction[],
-  categoryMap: Map<string, string>,
 ): Promise<{ inserted: number; failed: number }> {
   if (transactions.length === 0) return { inserted: 0, failed: 0 };
 
+  console.log('[Insert] Starting insert, transactions:', transactions.length, 'User:', userId);
+
+  // 1. Collect all unique category slugs needed (excluding _temporal)
+  const neededSlugs = new Set<string>();
+  for (const t of transactions) {
+    if (t.categorySlug && t.categorySlug !== '_temporal') {
+      neededSlugs.add(t.categorySlug);
+    }
+  }
+  console.log('[Insert] Category slugs needed:', [...neededSlugs]);
+
+  // 2. Fetch existing categories for this user
+  const { data: existingCats, error: catFetchErr } = await supabase
+    .from('categories')
+    .select('id, slug')
+    .eq('user_id', userId);
+
+  if (catFetchErr) {
+    console.error('[Insert] Error fetching categories:', catFetchErr);
+  }
+
+  const catMap = new Map<string, string>();
+  (existingCats || []).forEach((c: { id: string; slug: string }) => {
+    catMap.set(c.slug, c.id);
+  });
+  console.log('[Insert] Existing categories:', [...catMap.keys()]);
+
+  // 3. Create missing categories on the fly
+  const missingSlugs = [...neededSlugs].filter((s) => !catMap.has(s));
+  if (missingSlugs.length > 0) {
+    console.log('[Insert] Creating missing categories:', missingSlugs);
+    const sortBase = (existingCats || []).length;
+    const toCreate = missingSlugs.map((slug, i) => {
+      const defaults = CATEGORY_DEFAULTS[slug];
+      return {
+        user_id: userId,
+        name: defaults?.name ?? slug.replace(/-/g, ' ').replace(/^\w/, (c) => c.toUpperCase()),
+        slug,
+        color: defaults?.color ?? '#94a3b8',
+        icon: defaults?.icon ?? 'circle',
+        type: defaults?.type ?? 'expense',
+        monthly_budget: 0,
+        sort_order: sortBase + i,
+      };
+    });
+
+    const { data: created, error: createErr } = await supabase
+      .from('categories')
+      .insert(toCreate)
+      .select('id, slug');
+
+    if (createErr) {
+      console.error('[Insert] Error creating categories:', createErr);
+    } else {
+      (created || []).forEach((c: { id: string; slug: string }) => {
+        catMap.set(c.slug, c.id);
+      });
+      console.log('[Insert] Categories after creation:', [...catMap.keys()]);
+    }
+  }
+
+  // 4. Build transaction records with proper category_id
   const records = transactions.map((t) => ({
     user_id: userId,
     amount: t.amount,
@@ -147,24 +230,38 @@ export async function insertTransactions(
     transaction_date: t.transaction_date,
     source: 'excel_import' as const,
     original_concept: t.original_concept,
-    category_id: categoryMap.get(t.concept.toLowerCase()) || null,
+    category_id: (t.categorySlug && t.categorySlug !== '_temporal')
+      ? catMap.get(t.categorySlug) ?? null
+      : null,
   }));
 
-  // Insert in batches of 100 to avoid payload limits
+  // 5. Insert in batches
   let inserted = 0;
   let failed = 0;
   const BATCH = 100;
+  const totalBatches = Math.ceil(records.length / BATCH);
 
   for (let i = 0; i < records.length; i += BATCH) {
+    const batchNum = Math.floor(i / BATCH) + 1;
     const batch = records.slice(i, i + BATCH);
-    const { error } = await supabase.from('transactions').insert(batch);
-    if (error) {
-      console.error(`[Import] Batch insert error (rows ${i}-${i + batch.length}):`, error);
+    console.log(`[Insert] Inserting batch ${batchNum} of ${totalBatches} (${batch.length} records)`);
+
+    try {
+      const { data, error } = await supabase.from('transactions').insert(batch).select('id');
+      console.log(`[Insert] Batch ${batchNum} result:`, { inserted: data?.length ?? 0, error: error?.message ?? null });
+
+      if (error) {
+        console.error(`[Insert] Supabase error in batch ${batchNum}:`, error);
+        failed += batch.length;
+      } else {
+        inserted += (data?.length ?? batch.length);
+      }
+    } catch (err) {
+      console.error(`[Insert] Exception in batch ${batchNum}:`, err);
       failed += batch.length;
-    } else {
-      inserted += batch.length;
     }
   }
 
+  console.log(`[Insert] Done. Inserted: ${inserted}, Failed: ${failed}`);
   return { inserted, failed };
 }

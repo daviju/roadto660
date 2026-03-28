@@ -205,6 +205,7 @@ export const bbvaParser: BankParser = {
         amount: Math.abs(amount),
         type,
         source: 'excel_import',
+        categorySlug,
       });
     }
 
