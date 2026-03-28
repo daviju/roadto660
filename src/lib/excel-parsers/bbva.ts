@@ -127,23 +127,41 @@ export const bbvaParser: BankParser = {
 
     // Dynamically find header row instead of assuming fixed offset
     const headerIdx = findHeaderRow(rows);
-    const dataStart = headerIdx !== -1 ? headerIdx + 1 : 5; // fallback to 5
+    const dataStart = headerIdx !== -1 ? headerIdx + 1 : 5;
 
     console.log(`[BBVA] Total filas leidas: ${rows.length}`);
     console.log(`[BBVA] Header row: ${headerIdx}, Data starts at: ${dataStart}`);
-    if (rows[headerIdx]) console.log('[BBVA] Cabeceras:', rows[headerIdx]);
+
+    // Dynamically find column indices by header name
+    const headers = (headerIdx !== -1 ? rows[headerIdx] : []) as unknown[];
+    const findCol = (pattern: RegExp) =>
+      headers.findIndex((h) => pattern.test(String(h ?? '').trim()));
+
+    const fechaCol = findCol(/^fecha$/i);
+    const conceptoCol = findCol(/^concepto$/i);
+    const movimientoCol = findCol(/^movimiento$/i);
+    const importeCol = findCol(/^importe$/i);
+
+    console.log('[BBVA] Column indices:', { fechaCol, conceptoCol, movimientoCol, importeCol });
     if (rows[dataStart]) console.log('[BBVA] Primer dato:', rows[dataStart]);
+
+    // Need at least fecha and importe to proceed
+    if (fechaCol === -1 || importeCol === -1) {
+      console.error('[BBVA] Could not find required columns (Fecha, Importe) in headers:', headers);
+      errors.push({ row: headerIdx + 1, reason: 'No se encontraron las columnas Fecha e Importe en las cabeceras' });
+      return { transactions, errors, totalRows: 0 };
+    }
 
     for (let i = dataStart; i < rows.length; i++) {
       const row = rows[i];
       const displayRow = i + 1; // 1-indexed for user
-      if (!row || (row as unknown[]).length < 6) continue;
+      if (!row || (row as unknown[]).length < 3) continue;
 
       const r = row as unknown[];
-      const fechaStr = r[2];      // Column C: Fecha movimiento
-      const concepto = r[3];       // Column D: Concepto/Comercio
-      const movimiento = r[4];     // Column E: Descripción detallada
-      const importe = r[5];        // Column F: Importe (already a number)
+      const fechaStr = r[fechaCol];
+      const concepto = conceptoCol !== -1 ? r[conceptoCol] : null;
+      const movimiento = movimientoCol !== -1 ? r[movimientoCol] : null;
+      const importe = r[importeCol];
 
       // Validate minimum data
       if (!fechaStr || fechaStr === null) {
