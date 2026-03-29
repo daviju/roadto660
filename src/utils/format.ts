@@ -1,3 +1,10 @@
+/** Returns the actual calendar day for a preferred pay day in a given year/month.
+ *  If preferredDay=31 but the month has 30 days, returns 30. */
+export function clampPayDay(year: number, month: number, preferredDay: number): number {
+  const lastDay = new Date(year, month, 0).getDate(); // month is 1-based here
+  return Math.min(preferredDay, lastDay);
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
@@ -65,7 +72,8 @@ export function getCurrentMonth(payDay?: number, cycleMode?: 'calendar' | 'payda
   const now = new Date();
   if (cycleMode === 'payday' && payDay) {
     const day = now.getDate();
-    if (day >= payDay) {
+    const effectivePayDay = clampPayDay(now.getFullYear(), now.getMonth() + 1, payDay);
+    if (day >= effectivePayDay) {
       // After payday → we're in next month's cycle
       const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
@@ -89,9 +97,10 @@ export function getMonthDateRange(
   if (cycleMode === 'payday' && payDay) {
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear = month === 1 ? year - 1 : year;
-    const endDay = payDay - 1;
+    const effectivePayDay = clampPayDay(prevYear, prevMonth, payDay);
+    const endDay = effectivePayDay - 1;
     return {
-      start: `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(payDay).padStart(2, '0')}`,
+      start: `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(effectivePayDay).padStart(2, '0')}`,
       end: `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`,
     };
   }
@@ -116,7 +125,8 @@ export function getFinancialMonthForDate(
   }
   const date = new Date(dateStr);
   const day = date.getDate();
-  if (day >= payDay) {
+  const effectivePayDay = clampPayDay(date.getFullYear(), date.getMonth() + 1, payDay);
+  if (day >= effectivePayDay) {
     const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
     return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
   }

@@ -17,10 +17,12 @@ export interface ImportSummary {
   skippedRows: number;
 }
 
-// ─── Step 1: Read Excel into raw rows ─────────────────────────
+// ─── Step 1: Read Excel/CSV into raw rows ─────────────────────
 
-export function readExcelRows(buffer: ArrayBuffer): unknown[][] {
-  const workbook = XLSX.read(buffer, { type: 'array' });
+export function readExcelRows(buffer: ArrayBuffer, isCsv = false): unknown[][] {
+  const workbook = isCsv
+    ? XLSX.read(buffer, { type: 'array', raw: true, FS: ';' })
+    : XLSX.read(buffer, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
     header: 1,     // array of arrays, not objects
@@ -90,13 +92,16 @@ export async function checkDuplicates(
 
 // ─── Step 5: Build full ImportSummary (parse + dedup) ─────────
 
+const CSV_BANKS = new Set(['caixabank']);
+
 export async function buildImportSummary(
   bankId: string,
   buffer: ArrayBuffer,
   userId: string,
 ): Promise<ImportSummary> {
   // 1. Read
-  const rows = readExcelRows(buffer);
+  const isCsv = CSV_BANKS.has(bankId);
+  const rows = readExcelRows(buffer, isCsv);
   console.log(`[Import] Total filas leidas del archivo: ${rows.length}`);
 
   // 2. Validate

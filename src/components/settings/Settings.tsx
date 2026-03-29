@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX, ExternalLink, Mail, Send, Loader2 } from 'lucide-react';
+import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX, ExternalLink, Mail, Send } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { useAuth } from '../../lib/auth';
+import { useStore } from '../../store/useStore';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../shared/Toast';
 import { formatCurrency } from '../../utils/format';
@@ -13,6 +14,7 @@ import { PrivacyPolicyModal } from '../legal/PrivacyPolicyModal';
 export function Settings() {
   const { settings, updateSettings, exportData, importData, resetData, setPage } = useAppData();
   const { profile, session, signOut } = useAuth();
+  const setCachedTheme = useStore((s) => s.setCachedTheme);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showExcelImport, setShowExcelImport] = useState(false);
@@ -43,7 +45,7 @@ export function Settings() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Email reports
-  const [sendingReport, setSendingReport] = useState(false);
+
 
   const handleSave = async () => {
     await updateSettings({
@@ -159,32 +161,12 @@ export function Settings() {
   };
 
   const handleThemeChange = async (theme: 'dark' | 'light' | 'system') => {
+    setCachedTheme(theme); // immediate visual
     await updateSettings({ theme });
   };
 
-  const handleSendReportNow = async () => {
-    if (!session?.access_token) return;
-    setSendingReport(true);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const res = await fetch(`${supabaseUrl}/functions/v1/send-report`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Error al enviar el informe');
-      } else {
-        toast.success('Informe enviado a tu email');
-      }
-    } catch {
-      toast.error('Error de conexion');
-    } finally {
-      setSendingReport(false);
-    }
+  const handleSendReportNow = () => {
+    toast.info('Los informes por email se activarán próximamente');
   };
 
   return (
@@ -520,12 +502,12 @@ export function Settings() {
             </select>
             <motion.button
               onClick={handleSendReportNow}
-              disabled={sendingReport}
-              className="flex items-center gap-2 px-3 py-1.5 bg-accent-purple/15 text-accent-purple rounded-lg text-xs font-medium hover:bg-accent-purple/25 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 bg-accent-purple/15 text-accent-purple rounded-lg text-xs font-medium hover:bg-accent-purple/25 transition-colors"
               whileTap={{ scale: 0.97 }}
             >
-              {sendingReport ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              <Send size={12} />
               Enviar informe ahora
+              <span className="px-1.5 py-0.5 bg-accent-amber/20 text-accent-amber rounded text-[10px] font-semibold">Próximamente</span>
             </motion.button>
           </div>
           {profile?.email_reports_last_sent && (

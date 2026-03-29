@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Receipt, Wallet, PieChart, Milestone,
   BarChart3, Settings, ChevronLeft, ArrowLeftRight, Lightbulb,
-  Sun, Moon, Monitor, Target, Crown, LogOut, ShieldCheck, Flame,
+  Sun, Moon, Monitor, Target, Crown, LogOut, ShieldCheck, Flame, MoreHorizontal, X,
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useAuth } from '../../lib/auth';
@@ -27,6 +28,14 @@ const NAV_ITEMS: NavItem[] = [
   { page: 'goals', label: 'Metas', icon: Target, moduleKey: 'module_simulator' },
   { page: 'advice', label: 'Consejos', icon: Lightbulb, moduleKey: 'module_tips' },
   { page: 'settings', label: 'Ajustes', icon: Settings },
+];
+
+// Bottom nav primary items (always visible)
+const BOTTOM_NAV: NavItem[] = [
+  { page: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
+  { page: 'movements', label: 'Movimientos', icon: ArrowLeftRight },
+  { page: 'expenses', label: 'Gastos', icon: Receipt },
+  { page: 'charts', label: 'Graficos', icon: BarChart3 },
 ];
 
 function ThemeToggle() {
@@ -57,9 +66,141 @@ function ThemeToggle() {
   );
 }
 
+/** Drawer "Más" — slide-up desde abajo en móvil */
+function MobileDrawer({
+  open,
+  onClose,
+  drawerItems,
+  currentPage,
+  onNavigate,
+  isAdmin,
+  profile,
+  signOut,
+}: {
+  open: boolean;
+  onClose: () => void;
+  drawerItems: NavItem[];
+  currentPage: Page;
+  onNavigate: (page: Page) => void;
+  isAdmin: boolean;
+  profile: import('../../types').Profile | null;
+  signOut: () => void;
+}) {
+  const isPro = profile?.plan === 'pro';
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Overlay */}
+          <motion.div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+
+          {/* Drawer */}
+          <motion.div
+            className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-th-card rounded-t-2xl border-t border-th-border overflow-hidden"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+          >
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-th-border" />
+            </div>
+
+            {/* Close button */}
+            <div className="flex items-center justify-between px-4 pb-2">
+              <span className="text-sm font-semibold text-th-text">Mas opciones</span>
+              <button onClick={onClose} className="p-1.5 text-th-muted hover:text-th-text rounded-lg transition-colors" aria-label="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Nav items */}
+            <div className="px-3 pb-2 space-y-0.5">
+              {drawerItems.map(({ page, label, icon: Icon }) => {
+                const isActive = currentPage === page;
+                return (
+                  <button
+                    key={page}
+                    onClick={() => { onNavigate(page); onClose(); }}
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-colors ${
+                      isActive ? 'bg-accent-purple/15 text-accent-purple font-medium' : 'text-th-secondary hover:bg-th-hover hover:text-th-text'
+                    }`}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    <Icon size={20} aria-hidden="true" />
+                    {label}
+                  </button>
+                );
+              })}
+
+              {isAdmin && (
+                <button
+                  onClick={() => { onNavigate('admin'); onClose(); }}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-colors ${
+                    currentPage === 'admin' ? 'bg-accent-amber/15 text-accent-amber font-medium' : 'text-th-secondary hover:bg-th-hover hover:text-th-text'
+                  }`}
+                >
+                  <ShieldCheck size={20} aria-hidden="true" />
+                  Administracion
+                </button>
+              )}
+            </div>
+
+            {/* User row */}
+            {profile && (
+              <div className="px-4 py-3 border-t border-th-border flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-accent-purple/20 flex items-center justify-center text-sm font-bold text-accent-purple flex-shrink-0">
+                  {profile.full_name?.charAt(0)?.toUpperCase() || profile.email?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-th-text truncate">{profile.full_name || profile.email}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {isPro ? (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-accent-amber/15 text-accent-amber rounded-full font-medium flex items-center gap-0.5">
+                        <Crown size={10} /> PRO
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-th-hover text-th-muted rounded-full">FREE</span>
+                    )}
+                    {profile.streak_days > 0 && (
+                      <span className="text-[10px] text-orange-500 font-medium flex items-center gap-0.5">
+                        <Flame size={9} />{profile.streak_days}d
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={signOut}
+                  className="p-2 text-th-muted hover:text-accent-red transition-colors rounded-lg"
+                  aria-label="Cerrar sesion"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
+            )}
+
+            {/* Safe area padding */}
+            <div className="pb-safe" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }} />
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 export function Sidebar() {
   const { currentPage, setPage, sidebarOpen, toggleSidebar } = useStore();
-  const { profile, signOut } = useAuth();
+  const setCachedTheme = useStore((s) => s.setCachedTheme);
+  const { profile, signOut, updateProfile } = useAuth();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Filter nav items based on active modules
   const visibleItems = NAV_ITEMS.filter((item) => {
@@ -68,21 +209,19 @@ export function Sidebar() {
     return (profile as unknown as Record<string, unknown>)[item.moduleKey] !== false;
   });
 
-  // Mobile bottom nav - show top 5 items
-  const mobileItems: NavItem[] = [
-    { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { page: 'movements', label: 'Movimientos', icon: ArrowLeftRight },
-    { page: 'goals', label: 'Metas', icon: Target },
-    { page: 'advice', label: 'Consejos', icon: Lightbulb },
-    { page: 'settings', label: 'Mas', icon: Settings },
-  ];
+  // Items that go in the "Más" drawer (everything not in bottom nav)
+  const bottomNavPages = new Set(BOTTOM_NAV.map((i) => i.page));
+  const drawerItems = visibleItems.filter((i) => !bottomNavPages.has(i.page));
 
   const isAdmin = profile?.role === 'admin';
   const isPro = profile?.plan === 'pro';
 
+  // Is any drawer item currently active?
+  const drawerActive = drawerItems.some((i) => i.page === currentPage) || currentPage === 'admin';
+
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* ─── Desktop sidebar ─────────────────────────────── */}
       <motion.aside
         className="fixed left-0 top-0 h-full bg-th-card border-r border-th-border flex-col z-50 hidden md:flex"
         animate={{ width: sidebarOpen ? 224 : 64 }}
@@ -202,8 +341,9 @@ export function Sidebar() {
               <motion.button
                 onClick={() => {
                   const theme = profile?.theme || 'dark';
-                  const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
-                  // Will be handled by the auth context updateProfile
+                  const next: 'dark' | 'light' | 'system' = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
+                  setCachedTheme(next);
+                  void updateProfile({ theme: next });
                 }}
                 className="w-full flex items-center justify-center py-2 text-th-muted hover:text-th-text transition-colors"
                 aria-label="Cambiar tema"
@@ -279,32 +419,72 @@ export function Sidebar() {
         </motion.button>
       </motion.aside>
 
-      {/* Mobile bottom navigation */}
+      {/* ─── Mobile bottom navigation ────────────────────── */}
       <nav
-        className="fixed bottom-0 left-0 right-0 md:hidden bg-th-card border-t border-th-border z-50"
+        className="fixed bottom-0 left-0 right-0 md:hidden bg-th-card border-t border-th-border z-50 h-14"
         role="navigation"
         aria-label="Navegacion movil"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="flex justify-around px-1 py-1 pb-safe">
-          {mobileItems.map(({ page, label, icon: Icon }) => {
+        <div className="flex items-stretch h-full">
+          {BOTTOM_NAV.map(({ page, label, icon: Icon }) => {
             const isActive = currentPage === page;
             return (
               <button
                 key={page}
                 onClick={() => setPage(page)}
-                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 min-w-[60px] rounded-lg transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${
                   isActive ? 'text-accent-purple' : 'text-th-muted'
                 }`}
                 aria-label={label}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <Icon size={20} aria-hidden="true" />
-                <span className="text-[10px] whitespace-nowrap leading-tight">{label}</span>
+                {isActive && (
+                  <motion.div
+                    className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-accent-purple"
+                    layoutId="mobile-nav-indicator"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <Icon size={22} aria-hidden="true" />
+                <span className="text-[10px] leading-none">{label}</span>
               </button>
             );
           })}
+
+          {/* "Más" button */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${
+              drawerActive ? 'text-accent-purple' : 'text-th-muted'
+            }`}
+            aria-label="Mas opciones"
+            aria-expanded={drawerOpen}
+          >
+            {drawerActive && !drawerOpen && (
+              <motion.div
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-accent-purple"
+                layoutId="mobile-nav-indicator"
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              />
+            )}
+            <MoreHorizontal size={22} aria-hidden="true" />
+            <span className="text-[10px] leading-none">Mas</span>
+          </button>
         </div>
       </nav>
+
+      {/* Mobile drawer */}
+      <MobileDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        drawerItems={drawerItems}
+        currentPage={currentPage}
+        onNavigate={(page) => setPage(page)}
+        isAdmin={isAdmin}
+        profile={profile}
+        signOut={signOut}
+      />
     </>
   );
 }

@@ -68,18 +68,21 @@ export default function App() {
   const cachedTheme = useStore((s) => s.cachedTheme);
   const setCachedTheme = useStore((s) => s.setCachedTheme);
 
-  // Apply theme
-  const theme = profile?.theme || cachedTheme;
+  // Sync cachedTheme from profile when profile loads/changes
+  useEffect(() => {
+    if (profile?.theme) setCachedTheme(profile.theme);
+  }, [profile?.theme, setCachedTheme]);
+
+  // Apply cachedTheme to DOM — cachedTheme is the single source of truth for visual
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'system') {
+    if (cachedTheme === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       root.classList.toggle('light', !prefersDark);
     } else {
-      root.classList.toggle('light', theme === 'light');
+      root.classList.toggle('light', cachedTheme === 'light');
     }
-    setCachedTheme(theme);
-  }, [theme, setCachedTheme]);
+  }, [cachedTheme]);
 
   if (loading) return <LoadingScreen />;
 

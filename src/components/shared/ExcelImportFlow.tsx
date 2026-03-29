@@ -85,8 +85,8 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
 
     // Validate extension
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'xlsx' && ext !== 'xls') {
-      toast.error('Formato no soportado. Sube un archivo Excel (.xlsx)');
+    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
+      toast.error('Formato no soportado. Sube un archivo Excel (.xlsx, .xls) o CSV (.csv)');
       return;
     }
 
@@ -331,7 +331,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
           <input
             ref={fileRef}
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.csv"
             onChange={handleFileSelect}
             className="hidden"
           />
