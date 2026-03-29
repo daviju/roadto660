@@ -86,11 +86,14 @@ export default function App() {
   // Not authenticated
   if (!user) return <LoginPage />;
 
+  // User authenticated but profile not yet fetched — keep loading
+  if (!profile) return <LoadingScreen />;
+
   // Banned
-  if (profile?.is_banned) return <BannedScreen />;
+  if (profile.is_banned) return <BannedScreen />;
 
   // Onboarding not completed
-  if (profile && !profile.onboarding_completed) return <Onboarding />;
+  if (!profile.onboarding_completed) return <Onboarding />;
 
   return (
     <Layout>

@@ -12,6 +12,7 @@ import {
   STRENGTH_LABELS, STRENGTH_COLORS, translateAuthError,
 } from '../../utils/validation';
 import { sanitizeEmail, sanitizeName } from '../../utils/sanitize';
+import { PrivacyPolicyModal } from '../legal/PrivacyPolicyModal';
 
 type Mode = 'login' | 'register';
 
@@ -118,6 +119,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
@@ -456,9 +458,13 @@ export function LoginPage() {
                     />
                     <span className="text-xs text-th-muted leading-relaxed">
                       He leido y acepto la{' '}
-                      <a href="#privacy" className="text-accent-purple hover:underline" onClick={(e) => { e.preventDefault(); /* will link to privacy page */ }}>
+                      <button
+                        type="button"
+                        className="text-accent-purple hover:underline"
+                        onClick={() => setShowPrivacyModal(true)}
+                      >
                         politica de privacidad
-                      </a>
+                      </button>
                     </span>
                   </label>
                 )}
@@ -515,6 +521,8 @@ export function LoginPage() {
           Pago seguro con Stripe &middot; Tus datos estan protegidos
         </p>
       </motion.div>
+
+      <PrivacyPolicyModal open={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { fadeUp, buttonTap, staggerContainer, fadeUpSmall } from '../../utils/animations';
 import { useToast } from '../shared/Toast';
 import { ExcelImportFlow } from '../shared/ExcelImportFlow';
+import { FinancialBackground } from './FinancialBackground';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Supermercado', slug: 'supermercado', color: '#34d399', icon: 'shopping-cart', budget: 250 },
@@ -190,7 +191,8 @@ export function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-th-bg flex items-center justify-center p-4">
+    <div className="min-h-screen bg-th-bg flex items-center justify-center p-4 relative overflow-hidden">
+      <FinancialBackground />
       <motion.div
         className="w-full max-w-lg"
         variants={fadeUp}

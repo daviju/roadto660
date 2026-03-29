@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, Loader2, Bot, User } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, Bot, User, Construction } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { usePlan } from '../../hooks/usePlan';
 
@@ -12,6 +12,10 @@ interface Message {
 
 let msgId = 0;
 
+// Whether the chat advisor edge function is configured
+// We detect this on first send attempt; -1 = unknown, false = unavailable, true = ok
+let advisorAvailable: boolean | null = null;
+
 export function ChatWidget() {
   const { session } = useAuth();
   const { isPro } = usePlan();
@@ -19,7 +23,7 @@ export function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(advisorAvailable === false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,7 +45,6 @@ export function ChatWidget() {
     const userMsg: Message = { id: ++msgId, role: 'user', content: input.trim() };
     setMessages((prev) => [...prev.slice(-18), userMsg]); // Keep last 20
     setInput('');
-    setError(null);
     setLoading(true);
 
     try {
@@ -55,15 +58,30 @@ export function ChatWidget() {
         body: JSON.stringify({ message: userMsg.content }),
       });
 
+      if (res.status === 404 || res.status === 503 || res.status === 502) {
+        advisorAvailable = false;
+        setUnavailable(true);
+        return;
+      }
+
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Error al enviar el mensaje');
+        // Check for configuration errors (missing API key, function not deployed)
+        if (res.status >= 500 || data?.error?.toLowerCase().includes('api') || data?.error?.toLowerCase().includes('key')) {
+          advisorAvailable = false;
+          setUnavailable(true);
+          return;
+        }
+        const botMsg: Message = { id: ++msgId, role: 'assistant', content: data.error || 'Error al procesar tu pregunta.' };
+        setMessages((prev) => [...prev.slice(-18), botMsg]);
       } else {
+        advisorAvailable = true;
         const botMsg: Message = { id: ++msgId, role: 'assistant', content: data.reply };
         setMessages((prev) => [...prev.slice(-18), botMsg]);
       }
     } catch {
-      setError('Error de conexion');
+      advisorAvailable = false;
+      setUnavailable(true);
     } finally {
       setLoading(false);
     }
@@ -116,90 +134,98 @@ export function ChatWidget() {
               </div>
             </div>
 
-            {/* Messages */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-              {messages.length === 0 && (
-                <div className="text-center py-8">
-                  <Bot size={32} className="text-th-faint mx-auto mb-2" />
-                  <p className="text-xs text-th-muted">
-                    Preguntame sobre tus finanzas, metas o presupuestos
-                  </p>
-                </div>
-              )}
-
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  {msg.role === 'assistant' && (
-                    <div className="w-6 h-6 rounded-full bg-accent-purple/15 flex items-center justify-center flex-shrink-0 mt-1">
-                      <Bot size={12} className="text-accent-purple" />
+            {unavailable ? (
+              /* Maintenance message */
+              <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 text-center gap-3">
+                <Construction size={32} className="text-th-faint" />
+                <p className="text-sm text-th-text font-medium">El asesor financiero esta temporalmente fuera de servicio</p>
+                <p className="text-xs text-th-muted leading-relaxed">
+                  Estamos trabajando para activarlo pronto. Mientras tanto, consulta la pestana de{' '}
+                  <span className="text-accent-purple font-medium">Consejos</span>{' '}
+                  para recomendaciones automaticas.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Messages */}
+                <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                  {messages.length === 0 && (
+                    <div className="text-center py-8">
+                      <Bot size={32} className="text-th-faint mx-auto mb-2" />
+                      <p className="text-xs text-th-muted">
+                        Preguntame sobre tus finanzas, metas o presupuestos
+                      </p>
                     </div>
                   )}
-                  <div
-                    className={`max-w-[80%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'bg-accent-purple text-white rounded-br-md'
-                        : 'bg-th-hover text-th-text rounded-bl-md'
-                    }`}
+
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      {msg.role === 'assistant' && (
+                        <div className="w-6 h-6 rounded-full bg-accent-purple/15 flex items-center justify-center flex-shrink-0 mt-1">
+                          <Bot size={12} className="text-accent-purple" />
+                        </div>
+                      )}
+                      <div
+                        className={`max-w-[80%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
+                          msg.role === 'user'
+                            ? 'bg-accent-purple text-white rounded-br-md'
+                            : 'bg-th-hover text-th-text rounded-bl-md'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+                      {msg.role === 'user' && (
+                        <div className="w-6 h-6 rounded-full bg-accent-cyan/15 flex items-center justify-center flex-shrink-0 mt-1">
+                          <User size={12} className="text-accent-cyan" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {loading && (
+                    <div className="flex gap-2 items-start">
+                      <div className="w-6 h-6 rounded-full bg-accent-purple/15 flex items-center justify-center flex-shrink-0">
+                        <Bot size={12} className="text-accent-purple" />
+                      </div>
+                      <div className="bg-th-hover px-3 py-2 rounded-xl rounded-bl-md">
+                        <div className="flex gap-1">
+                          <span className="w-1.5 h-1.5 bg-th-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 bg-th-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 bg-th-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Input */}
+                <div className="px-3 py-2 border-t border-th-border flex gap-2 flex-shrink-0">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') sendMessage(); }}
+                    placeholder="Escribe tu pregunta..."
+                    maxLength={500}
+                    className="flex-1 bg-th-input border border-th-border rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:ring-1 focus:ring-accent-purple/30 transition-colors"
+                    disabled={loading}
+                  />
+                  <motion.button
+                    onClick={sendMessage}
+                    disabled={!input.trim() || loading}
+                    className="p-2 bg-accent-purple text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent-purple/90 transition-colors"
+                    whileTap={{ scale: 0.9 }}
+                    aria-label="Enviar mensaje"
                   >
-                    {msg.content}
-                  </div>
-                  {msg.role === 'user' && (
-                    <div className="w-6 h-6 rounded-full bg-accent-cyan/15 flex items-center justify-center flex-shrink-0 mt-1">
-                      <User size={12} className="text-accent-cyan" />
-                    </div>
-                  )}
+                    {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  </motion.button>
                 </div>
-              ))}
-
-              {/* Loading indicator */}
-              {loading && (
-                <div className="flex gap-2 items-start">
-                  <div className="w-6 h-6 rounded-full bg-accent-purple/15 flex items-center justify-center flex-shrink-0">
-                    <Bot size={12} className="text-accent-purple" />
-                  </div>
-                  <div className="bg-th-hover px-3 py-2 rounded-xl rounded-bl-md">
-                    <div className="flex gap-1">
-                      <span className="w-1.5 h-1.5 bg-th-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1.5 h-1.5 bg-th-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-1.5 h-1.5 bg-th-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {error && (
-                <div className="text-center">
-                  <p className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded-lg inline-block">{error}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Input */}
-            <div className="px-3 py-2 border-t border-th-border flex gap-2 flex-shrink-0">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') sendMessage(); }}
-                placeholder="Escribe tu pregunta..."
-                maxLength={500}
-                className="flex-1 bg-th-input border border-th-border rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:ring-1 focus:ring-accent-purple/30 transition-colors"
-                disabled={loading}
-              />
-              <motion.button
-                onClick={sendMessage}
-                disabled={!input.trim() || loading}
-                className="p-2 bg-accent-purple text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent-purple/90 transition-colors"
-                whileTap={{ scale: 0.9 }}
-                aria-label="Enviar mensaje"
-              >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              </motion.button>
-            </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

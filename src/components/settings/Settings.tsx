@@ -8,6 +8,7 @@ import { useToast } from '../shared/Toast';
 import { formatCurrency } from '../../utils/format';
 import { staggerContainer, fadeUp, scaleFade } from '../../utils/animations';
 import { ExcelImportFlow } from '../shared/ExcelImportFlow';
+import { PrivacyPolicyModal } from '../legal/PrivacyPolicyModal';
 
 export function Settings() {
   const { settings, updateSettings, exportData, importData, resetData, setPage } = useAppData();
@@ -32,6 +33,9 @@ export function Settings() {
   const [cycleModeInput, setCycleModeInput] = useState(settings.cycleMode);
 
   // (Excel import handled by ExcelImportFlow component)
+
+  // Privacy modal
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   // RGPD
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -184,6 +188,7 @@ export function Settings() {
   };
 
   return (
+    <>
     <motion.div className="space-y-6" variants={staggerContainer} initial="initial" animate="animate">
       <motion.div variants={fadeUp}>
         <h2 className="text-2xl font-bold text-th-text">Ajustes</h2>
@@ -535,7 +540,7 @@ export function Settings() {
       <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border space-y-3 card-glow">
         <h3 className="text-sm font-semibold text-th-text">Privacidad y datos</h3>
         <div className="flex flex-wrap gap-2">
-          <motion.button onClick={() => setPage('privacy')}
+          <motion.button onClick={() => setShowPrivacyModal(true)}
             className="flex items-center gap-2 px-3 py-2 bg-accent-purple/15 text-accent-purple rounded-lg text-xs font-medium hover:bg-accent-purple/25 transition-colors"
             whileTap={{ scale: 0.97 }}>
             <ExternalLink size={12} /> Politica de privacidad
@@ -650,6 +655,9 @@ export function Settings() {
         )}
       </AnimatePresence>
     </motion.div>
+
+    <PrivacyPolicyModal open={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
+    </>
   );
 }
 
