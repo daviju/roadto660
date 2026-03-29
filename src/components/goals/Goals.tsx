@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
   Target, TrendingUp, Clock, Sparkles, Crown, Lock,
   CheckCircle2, ChevronDown, ChevronUp, Scissors, Zap,
+  Plus, Pencil, Trash2, Star, X,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
@@ -58,6 +59,19 @@ export function Goals() {
   const [loading, setLoading] = useState(true);
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
 
+  // CRUD state
+  const [showGoalForm, setShowGoalForm] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [goalName, setGoalName] = useState('');
+  const [goalDesc, setGoalDesc] = useState('');
+  const [goalAmount, setGoalAmount] = useState('');
+  const [goalDate, setGoalDate] = useState('');
+  const [goalIcon, setGoalIcon] = useState('🎯');
+  // Add item state
+  const [addingItemGoalId, setAddingItemGoalId] = useState<string | null>(null);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemCost, setNewItemCost] = useState('');
+
   // Fetch goals and recent transactions
   useEffect(() => {
     if (!user) {
@@ -102,6 +116,131 @@ export function Goals() {
       clearTimeout(timeout);
     };
   }, [user]);
+
+  // ─── CRUD handlers ───────────────────────────────────────
+  const resetGoalForm = () => {
+    setShowGoalForm(false);
+    setEditingGoalId(null);
+    setGoalName('');
+    setGoalDesc('');
+    setGoalAmount('');
+    setGoalDate('');
+    setGoalIcon('🎯');
+  };
+
+  const handleSaveGoal = async () => {
+    if (!user || !goalName.trim() || !goalAmount) return;
+    const payload = {
+      name: goalName.trim(),
+      description: goalDesc.trim() || null,
+      target_amount: parseFloat(goalAmount) || 0,
+      target_date: goalDate || null,
+      icon: goalIcon,
+    };
+
+    if (editingGoalId) {
+      const { data } = await supabase
+        .from('goals')
+        .update(payload)
+        .eq('id', editingGoalId)
+        .eq('user_id', user.id)
+        .select('*, items:goal_items(*)')
+        .single();
+      if (data) setGoals((prev) => prev.map((g) => (g.id === editingGoalId ? data as Goal : g)));
+    } else {
+      const { data } = await supabase
+        .from('goals')
+        .insert({ ...payload, user_id: user.id, is_active: goals.length === 0, category: 'general', metadata: {} })
+        .select('*, items:goal_items(*)')
+        .single();
+      if (data) setGoals((prev) => [...prev, data as Goal]);
+    }
+    resetGoalForm();
+  };
+
+  const startEditGoal = (goal: Goal) => {
+    setEditingGoalId(goal.id);
+    setGoalName(goal.name);
+    setGoalDesc(goal.description || '');
+    setGoalAmount(goal.target_amount.toString());
+    setGoalDate(goal.target_date || '');
+    setGoalIcon(goal.icon || '🎯');
+    setShowGoalForm(true);
+  };
+
+  const handleDeleteGoal = async (id: string) => {
+    if (!user || !confirm('¿Eliminar esta meta y todos sus items?')) return;
+    await supabase.from('goal_items').delete().eq('goal_id', id);
+    await supabase.from('goals').delete().eq('id', id).eq('user_id', user.id);
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+  };
+
+  const handleSetActive = async (id: string) => {
+    if (!user) return;
+    // Deactivate all, activate this one
+    await supabase.from('goals').update({ is_active: false }).eq('user_id', user.id);
+    await supabase.from('goals').update({ is_active: true }).eq('id', id).eq('user_id', user.id);
+    setGoals((prev) => prev.map((g) => ({ ...g, is_active: g.id === id })));
+  };
+
+  const handleToggleItem = async (goalId: string, itemId: string, currentPaid: boolean) => {
+    if (!user) return;
+    const updates: Record<string, unknown> = { is_paid: !currentPaid };
+    if (!currentPaid) updates.paid_date = new Date().toISOString().slice(0, 10);
+    else updates.paid_date = null;
+
+    const { data } = await supabase
+      .from('goal_items')
+      .update(updates)
+      .eq('id', itemId)
+      .select()
+      .single();
+    if (data) {
+      setGoals((prev) =>
+        prev.map((g) =>
+          g.id === goalId
+            ? { ...g, items: (g.items || []).map((i) => (i.id === itemId ? { ...i, ...(data as Record<string, unknown>) } as typeof i : i)) }
+            : g
+        ),
+      );
+    }
+  };
+
+  const handleAddItem = async (goalId: string) => {
+    if (!user || !newItemName.trim() || !newItemCost) return;
+    const goal = goals.find((g) => g.id === goalId);
+    const sortOrder = goal?.items?.length ?? 0;
+
+    const { data } = await supabase
+      .from('goal_items')
+      .insert({ goal_id: goalId, user_id: user.id, name: newItemName.trim(), cost: parseFloat(newItemCost) || 0, sort_order: sortOrder })
+      .select()
+      .single();
+    if (data) {
+      setGoals((prev) =>
+        prev.map((g) =>
+          g.id === goalId
+            ? { ...g, items: [...(g.items || []), data as Goal['items'] extends (infer U)[] | undefined ? U : never] }
+            : g
+        ),
+      );
+    }
+    setNewItemName('');
+    setNewItemCost('');
+    setAddingItemGoalId(null);
+  };
+
+  const handleDeleteItem = async (goalId: string, itemId: string) => {
+    if (!user) return;
+    await supabase.from('goal_items').delete().eq('id', itemId);
+    setGoals((prev) =>
+      prev.map((g) =>
+        g.id === goalId
+          ? { ...g, items: (g.items || []).filter((i) => i.id !== itemId) }
+          : g
+      ),
+    );
+  };
 
   // ─── Derived data ────────────────────────────────────────
   const activeGoal = goals.find((g) => g.is_active && !g.is_achieved);
@@ -270,13 +409,82 @@ export function Goals() {
             Simula escenarios y alcanza tus objetivos mas rapido
           </p>
         </div>
-        {!isPro && (
-          <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-accent-amber/10 text-accent-amber rounded-full font-medium self-start">
-            <Crown size={12} aria-hidden="true" />
-            Escenarios PRO
-          </span>
-        )}
+        <div className="flex items-center gap-2 self-start">
+          {!isPro && (
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-accent-amber/10 text-accent-amber rounded-full font-medium">
+              <Crown size={12} aria-hidden="true" />
+              Escenarios PRO
+            </span>
+          )}
+          <motion.button
+            onClick={() => { resetGoalForm(); setShowGoalForm(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-purple text-white rounded-lg text-sm font-medium hover:bg-accent-purple/80 transition-colors"
+            whileTap={{ scale: 0.95 }}
+          >
+            <Plus size={14} /> Nueva meta
+          </motion.button>
+        </div>
       </motion.div>
+
+      {/* Goal creation/edit form */}
+      <AnimatePresence>
+        {showGoalForm && (
+          <motion.div
+            variants={fadeUp}
+            initial="initial" animate="animate" exit="exit"
+            className="bg-th-card rounded-xl p-4 md:p-5 border border-accent-purple/30 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-th-text">
+                {editingGoalId ? 'Editar meta' : 'Nueva meta'}
+              </h3>
+              <button onClick={resetGoalForm} className="text-th-muted hover:text-th-text"><X size={16} /></button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-th-muted mb-1">Nombre</label>
+                <input type="text" value={goalName} onChange={(e) => setGoalName(e.target.value)}
+                  placeholder="Ej: Moto nueva"
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-th-muted mb-1">Importe objetivo</label>
+                <input type="number" min="0" step="1" value={goalAmount} onChange={(e) => setGoalAmount(e.target.value)}
+                  placeholder="5000"
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-th-muted mb-1">Fecha objetivo (opcional)</label>
+                <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-th-muted mb-1">Icono</label>
+                <input type="text" value={goalIcon} onChange={(e) => setGoalIcon(e.target.value)}
+                  className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] text-th-muted mb-1">Descripción (opcional)</label>
+              <input type="text" value={goalDesc} onChange={(e) => setGoalDesc(e.target.value)}
+                placeholder="Ej: Yamaha MT-07 2024"
+                className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <motion.button onClick={resetGoalForm}
+                className="px-3 py-1.5 text-xs text-th-muted hover:text-th-text" whileTap={{ scale: 0.95 }}>
+                Cancelar
+              </motion.button>
+              <motion.button onClick={handleSaveGoal}
+                disabled={!goalName.trim() || !goalAmount}
+                className="px-4 py-1.5 bg-accent-purple text-white rounded-lg text-xs font-medium hover:bg-accent-purple/80 disabled:opacity-50 transition-colors"
+                whileTap={{ scale: 0.95 }}>
+                {editingGoalId ? 'Guardar cambios' : 'Crear meta'}
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* No goals state */}
       {goals.length === 0 && (
@@ -294,9 +502,16 @@ export function Goals() {
           <h3 className="text-lg font-semibold text-th-text mb-2">
             No tienes metas configuradas
           </h3>
-          <p className="text-sm text-th-secondary max-w-md mx-auto">
-            Las metas se gestionan desde la base de datos. Contacta al admin o espera a que se habilite la creacion desde la app.
+          <p className="text-sm text-th-secondary max-w-md mx-auto mb-4">
+            Crea tu primera meta de ahorro y empieza a planificar tus objetivos financieros.
           </p>
+          <motion.button
+            onClick={() => { resetGoalForm(); setShowGoalForm(true); }}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-accent-purple text-white rounded-lg text-sm font-medium hover:bg-accent-purple/80 transition-colors"
+            whileTap={{ scale: 0.95 }}
+          >
+            <Plus size={14} /> Crear primera meta
+          </motion.button>
         </motion.div>
       )}
 
@@ -324,9 +539,17 @@ export function Goals() {
                   )}
                 </div>
               </div>
-              <span className="text-xs px-2.5 py-1 bg-accent-green/10 text-accent-green rounded-full font-medium">
-                Activa
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-1 bg-accent-green/10 text-accent-green rounded-full font-medium">
+                  Activa
+                </span>
+                <button onClick={() => startEditGoal(activeGoal)} className="p-1.5 text-th-muted hover:text-accent-purple transition-colors" aria-label="Editar meta">
+                  <Pencil size={14} />
+                </button>
+                <button onClick={() => handleDeleteGoal(activeGoal.id)} className="p-1.5 text-th-muted hover:text-accent-red transition-colors" aria-label="Eliminar meta">
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
 
             {/* Progress bar */}
@@ -420,35 +643,61 @@ export function Goals() {
             )}
 
             {/* Goal items breakdown */}
-            {activeGoal.items && activeGoal.items.length > 0 && (
-              <div className="mt-5 border-t border-th-border pt-4">
-                <h4 className="text-xs text-th-muted uppercase tracking-wider mb-3">Desglose de items</h4>
-                <div className="space-y-2">
-                  {activeGoal.items
-                    .sort((a, b) => a.sort_order - b.sort_order)
-                    .map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between text-sm"
+            <div className="mt-5 border-t border-th-border pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs text-th-muted uppercase tracking-wider">Desglose de items</h4>
+                <button
+                  onClick={() => { setAddingItemGoalId(addingItemGoalId === activeGoal.id ? null : activeGoal.id); setNewItemName(''); setNewItemCost(''); }}
+                  className="text-xs text-accent-purple hover:text-accent-purple/80 flex items-center gap-1"
+                >
+                  <Plus size={12} /> Añadir item
+                </button>
+              </div>
+              {addingItemGoalId === activeGoal.id && (
+                <div className="flex gap-2 mb-3">
+                  <input type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)}
+                    placeholder="Nombre del item" className="flex-1 bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-xs text-th-text focus:border-accent-purple focus:outline-none" />
+                  <input type="number" value={newItemCost} onChange={(e) => setNewItemCost(e.target.value)}
+                    placeholder="Coste" className="w-24 bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-xs text-th-text font-mono focus:border-accent-purple focus:outline-none" />
+                  <motion.button onClick={() => handleAddItem(activeGoal.id)}
+                    disabled={!newItemName.trim() || !newItemCost}
+                    className="px-3 py-1.5 bg-accent-purple text-white rounded-lg text-xs disabled:opacity-50" whileTap={{ scale: 0.95 }}>
+                    Añadir
+                  </motion.button>
+                </div>
+              )}
+              <div className="space-y-2">
+                {(activeGoal.items || [])
+                  .sort((a, b) => a.sort_order - b.sort_order)
+                  .map((item) => (
+                    <div key={item.id} className="flex items-center justify-between text-sm group">
+                      <button
+                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                        onClick={() => handleToggleItem(activeGoal.id, item.id, item.is_paid)}
                       >
-                        <div className="flex items-center gap-2">
-                          {item.is_paid ? (
-                            <CheckCircle2 size={14} className="text-accent-green" aria-hidden="true" />
-                          ) : (
-                            <div className="w-3.5 h-3.5 rounded-full border-2 border-th-border" />
-                          )}
-                          <span className={item.is_paid ? 'text-th-muted line-through' : 'text-th-secondary'}>
-                            {item.name}
-                          </span>
-                        </div>
+                        {item.is_paid ? (
+                          <CheckCircle2 size={14} className="text-accent-green" aria-hidden="true" />
+                        ) : (
+                          <div className="w-3.5 h-3.5 rounded-full border-2 border-th-border" />
+                        )}
+                        <span className={item.is_paid ? 'text-th-muted line-through' : 'text-th-secondary'}>
+                          {item.name}
+                        </span>
+                      </button>
+                      <div className="flex items-center gap-2">
                         <span className={`font-mono text-xs ${item.is_paid ? 'text-accent-green' : 'text-th-text'}`}>
                           {formatCurrency(item.cost)}
                         </span>
+                        <button onClick={() => handleDeleteItem(activeGoal.id, item.id)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-th-muted hover:text-accent-red transition-all"
+                          aria-label={`Eliminar ${item.name}`}>
+                          <Trash2 size={12} />
+                        </button>
                       </div>
-                    ))}
-                </div>
+                    </div>
+                  ))}
               </div>
-            )}
+            </div>
           </motion.div>
         );
       })()}
@@ -615,26 +864,73 @@ export function Goals() {
                         {goal.description && (
                           <p className="text-xs text-th-secondary mb-3">{goal.description}</p>
                         )}
-                        {goal.items && goal.items.length > 0 && (
-                          <div className="space-y-1.5">
-                            {goal.items
-                              .sort((a, b) => a.sort_order - b.sort_order)
-                              .map((item) => (
-                                <div key={item.id} className="flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-2">
-                                    {item.is_paid ? (
-                                      <CheckCircle2 size={12} className="text-accent-green" aria-hidden="true" />
-                                    ) : (
-                                      <div className="w-3 h-3 rounded-full border-2 border-th-border" />
-                                    )}
-                                    <span className={item.is_paid ? 'text-th-muted line-through' : 'text-th-secondary'}>
-                                      {item.name}
-                                    </span>
-                                  </div>
+                        {/* Action buttons */}
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <button onClick={() => handleSetActive(goal.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[10px] bg-accent-green/10 text-accent-green rounded-lg font-medium hover:bg-accent-green/20 transition-colors">
+                            <Star size={10} /> Activar
+                          </button>
+                          <button onClick={() => startEditGoal(goal)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[10px] bg-th-hover text-th-muted rounded-lg hover:text-th-text transition-colors">
+                            <Pencil size={10} /> Editar
+                          </button>
+                          <button onClick={() => handleDeleteGoal(goal.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[10px] bg-accent-red/10 text-accent-red rounded-lg hover:bg-accent-red/20 transition-colors">
+                            <Trash2 size={10} /> Eliminar
+                          </button>
+                        </div>
+                        {/* Items */}
+                        <div className="space-y-1.5">
+                          {(goal.items || [])
+                            .sort((a, b) => a.sort_order - b.sort_order)
+                            .map((item) => (
+                              <div key={item.id} className="flex items-center justify-between text-xs group">
+                                <button
+                                  className="flex items-center gap-2 hover:opacity-80"
+                                  onClick={() => handleToggleItem(goal.id, item.id, item.is_paid)}
+                                >
+                                  {item.is_paid ? (
+                                    <CheckCircle2 size={12} className="text-accent-green" aria-hidden="true" />
+                                  ) : (
+                                    <div className="w-3 h-3 rounded-full border-2 border-th-border" />
+                                  )}
+                                  <span className={item.is_paid ? 'text-th-muted line-through' : 'text-th-secondary'}>
+                                    {item.name}
+                                  </span>
+                                </button>
+                                <div className="flex items-center gap-1.5">
                                   <span className="font-mono text-th-text">{formatCurrency(item.cost)}</span>
+                                  <button onClick={() => handleDeleteItem(goal.id, item.id)}
+                                    className="opacity-0 group-hover:opacity-100 text-th-muted hover:text-accent-red transition-all">
+                                    <Trash2 size={10} />
+                                  </button>
                                 </div>
-                              ))}
+                              </div>
+                            ))}
+                        </div>
+                        {/* Add item */}
+                        {addingItemGoalId === goal.id ? (
+                          <div className="flex gap-2 mt-2">
+                            <input type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)}
+                              placeholder="Nombre" className="flex-1 bg-th-input border border-th-border-strong rounded-lg px-2 py-1 text-[11px] text-th-text focus:border-accent-purple focus:outline-none" />
+                            <input type="number" value={newItemCost} onChange={(e) => setNewItemCost(e.target.value)}
+                              placeholder="€" className="w-20 bg-th-input border border-th-border-strong rounded-lg px-2 py-1 text-[11px] text-th-text font-mono focus:border-accent-purple focus:outline-none" />
+                            <button onClick={() => handleAddItem(goal.id)}
+                              disabled={!newItemName.trim() || !newItemCost}
+                              className="px-2 py-1 bg-accent-purple text-white rounded-lg text-[10px] disabled:opacity-50">
+                              OK
+                            </button>
+                            <button onClick={() => setAddingItemGoalId(null)} className="text-th-muted text-[10px]">
+                              <X size={12} />
+                            </button>
                           </div>
+                        ) : (
+                          <button
+                            onClick={() => { setAddingItemGoalId(goal.id); setNewItemName(''); setNewItemCost(''); }}
+                            className="mt-2 text-[10px] text-accent-purple flex items-center gap-1 hover:opacity-80"
+                          >
+                            <Plus size={10} /> Añadir item
+                          </button>
                         )}
                         {goal.target_date && (
                           <p className="text-xs text-th-muted mt-3">

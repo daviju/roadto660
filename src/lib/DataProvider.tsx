@@ -71,7 +71,7 @@ interface DataContextType {
   loading: boolean;
 
   // Settings
-  updateSettings: (updates: Partial<AppSettings>) => void;
+  updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
 
   // Expenses
   addExpense: (expense: Omit<Expense, 'id'>) => void;
@@ -106,6 +106,12 @@ interface DataContextType {
   updateMotorcycle: (id: string, updates: Partial<Motorcycle>) => void;
   deleteMotorcycle: (id: string) => void;
   getActiveMotorcycle: () => Motorcycle | undefined;
+
+  // Categories
+  categories: Category[];
+  addCategory: (cat: { name: string; color: string; icon: string; type: 'expense' | 'income' | 'both'; monthly_budget?: number }) => Promise<Category | null>;
+  updateCategory: (id: string, updates: Partial<Pick<Category, 'name' | 'color' | 'icon' | 'monthly_budget' | 'type'>>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
 
   // Navigation
   setPage: (page: string) => void;
@@ -368,7 +374,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // ── CRUD: Settings ────────────────────────────────────────────
 
   const updateSettings = useCallback(
-    (updates: Partial<AppSettings>) => {
+    async (updates: Partial<AppSettings>) => {
       // Profile-backed fields
       const profileUpdates: Record<string, unknown> = {};
       if (updates.emergencyFund !== undefined) profileUpdates.emergency_fund = updates.emergencyFund;
@@ -378,7 +384,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (updates.currentBalance !== undefined) profileUpdates.current_balance = updates.currentBalance;
 
       if (Object.keys(profileUpdates).length > 0) {
-        updateProfile(profileUpdates);
+        await updateProfile(profileUpdates);
       }
 
       // Extra (localStorage-backed) fields
@@ -705,6 +711,74 @@ export function DataProvider({ children }: { children: ReactNode }) {
           prev.map((c) => (c.id === cat.id ? (data as Category) : c)),
         );
       }
+    },
+    [user],
+  );
+
+  // ── CRUD: Categories (full) ────────────────────────────────────
+
+  const addCategoryFull = useCallback(
+    async (cat: { name: string; color: string; icon: string; type: 'expense' | 'income' | 'both'; monthly_budget?: number }): Promise<Category | null> => {
+      if (!user) return null;
+      const slug = cat.name.toLowerCase().replace(/[^a-z0-9áéíóúüñ]+/g, '-').replace(/(^-|-$)/g, '');
+      const { data, error } = await supabase
+        .from('categories')
+        .insert({
+          user_id: user.id,
+          name: cat.name,
+          slug,
+          color: cat.color,
+          icon: cat.icon,
+          type: cat.type,
+          monthly_budget: cat.monthly_budget ?? 0,
+          sort_order: categoriesRef.current.length,
+        })
+        .select()
+        .single();
+      if (error) {
+        console.error('[addCategory]', error.message);
+        return null;
+      }
+      if (data) {
+        const created = data as Category;
+        setCategories((prev) => [...prev, created]);
+        return created;
+      }
+      return null;
+    },
+    [user],
+  );
+
+  const updateCategoryFull = useCallback(
+    async (id: string, updates: Partial<Pick<Category, 'name' | 'color' | 'icon' | 'monthly_budget' | 'type'>>) => {
+      if (!user) return;
+      const payload: Record<string, unknown> = { ...updates };
+      if (updates.name) {
+        payload.slug = updates.name.toLowerCase().replace(/[^a-z0-9áéíóúüñ]+/g, '-').replace(/(^-|-$)/g, '');
+      }
+      const { data, error } = await supabase
+        .from('categories')
+        .update(payload)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      if (error) console.error('[updateCategory]', error.message);
+      if (data) {
+        setCategories((prev) => prev.map((c) => (c.id === id ? (data as Category) : c)));
+      }
+    },
+    [user],
+  );
+
+  const deleteCategoryFull = useCallback(
+    async (id: string) => {
+      if (!user) return;
+      // Unlink transactions from this category before deleting
+      await supabase.from('transactions').update({ category_id: null }).eq('category_id', id).eq('user_id', user.id);
+      const { error } = await supabase.from('categories').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('[deleteCategory]', error.message);
+      else setCategories((prev) => prev.filter((c) => c.id !== id));
     },
     [user],
   );
@@ -1196,6 +1270,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     updateBudget,
     addBudget,
     deleteBudget,
+
+    categories,
+    addCategory: addCategoryFull,
+    updateCategory: updateCategoryFull,
+    deleteCategory: deleteCategoryFull,
 
     updatePhaseStatus,
     togglePhaseItem,

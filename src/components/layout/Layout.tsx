@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
+import { FinancialBackground } from '../auth/FinancialBackground';
 import { useStore } from '../../store/useStore';
 
 function useIsMobile() {
@@ -22,7 +23,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
 
   return (
-    <div className="min-h-screen bg-th-bg text-th-text">
+    <div className="min-h-screen bg-th-bg text-th-text relative">
+      <FinancialBackground subtle />
       <a href="#main-content" className="skip-to-content">
         Saltar al contenido
       </a>

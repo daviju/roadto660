@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX, ExternalLink, Mail, Send } from 'lucide-react';
+import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX, ExternalLink, Mail, Send, Pencil } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { useAuth } from '../../lib/auth';
 import { useStore } from '../../store/useStore';
@@ -12,7 +12,7 @@ import { ExcelImportFlow } from '../shared/ExcelImportFlow';
 import { PrivacyPolicyModal } from '../legal/PrivacyPolicyModal';
 
 export function Settings() {
-  const { settings, updateSettings, exportData, importData, resetData, setPage } = useAppData();
+  const { settings, updateSettings, exportData, importData, resetData, setPage, categories: dbCategories, addCategory: addCategoryDb, updateCategory: updateCategoryDb, deleteCategory: deleteCategoryDb } = useAppData();
   const { profile, session, signOut } = useAuth();
   const setCachedTheme = useStore((s) => s.setCachedTheme);
   const { toast } = useToast();
@@ -24,7 +24,6 @@ export function Settings() {
   const [income, setIncome] = useState(settings.monthlyIncome.toString());
   const [cashback, setCashback] = useState(settings.cashbackNet.toString());
   const [targetDate, setTargetDate] = useState(settings.targetDate);
-  const [newCategory, setNewCategory] = useState('');
   const [newConcept, setNewConcept] = useState('');
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [showConfirmImport, setShowConfirmImport] = useState(false);
@@ -44,7 +43,14 @@ export function Settings() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Email reports
+  // Category management
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatColor, setEditCatColor] = useState('#a78bfa');
+  const [editCatIcon, setEditCatIcon] = useState('circle');
+  const [editCatType, setEditCatType] = useState<'expense' | 'income' | 'both'>('expense');
+  const [editCatBudget, setEditCatBudget] = useState('0');
+  const [showAddCategory, setShowAddCategory] = useState(false);
 
 
   const handleSave = async () => {
@@ -138,22 +144,49 @@ export function Settings() {
     setShowConfirmReset(false);
   };
 
-  const addCategory = async () => {
-    if (!newCategory.trim()) return;
-    if (settings.categories.includes(newCategory.trim())) return;
-    await updateSettings({ categories: [...settings.categories, newCategory.trim()] });
-    setNewCategory('');
+  const handleSaveCategory = async () => {
+    const name = editCatName.trim();
+    if (!name) return;
+    if (editingCatId) {
+      await updateCategoryDb(editingCatId, { name, color: editCatColor, icon: editCatIcon, type: editCatType, monthly_budget: parseFloat(editCatBudget) || 0 });
+      toast.success('Categoría actualizada');
+    } else {
+      const created = await addCategoryDb({ name, color: editCatColor, icon: editCatIcon, type: editCatType, monthly_budget: parseFloat(editCatBudget) || 0 });
+      if (created) toast.success(`Categoría "${name}" creada`);
+      else { toast.error('Error al crear categoría'); return; }
+    }
+    setEditingCatId(null);
+    setShowAddCategory(false);
+    setEditCatName('');
+    setEditCatColor('#a78bfa');
+    setEditCatIcon('circle');
+    setEditCatType('expense');
+    setEditCatBudget('0');
   };
 
-  const removeCategory = async (cat: string) => {
-    await updateSettings({ categories: settings.categories.filter((c) => c !== cat) });
+  const startEditCategory = (cat: { id: string; name: string; color: string; icon: string; type: 'expense' | 'income' | 'both'; monthly_budget: number }) => {
+    setEditingCatId(cat.id);
+    setEditCatName(cat.name);
+    setEditCatColor(cat.color);
+    setEditCatIcon(cat.icon);
+    setEditCatType(cat.type);
+    setEditCatBudget(cat.monthly_budget.toString());
+    setShowAddCategory(true);
+  };
+
+  const handleDeleteCategory = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar la categoría "${name}"? Las transacciones asociadas quedarán sin categoría.`)) return;
+    await deleteCategoryDb(id);
+    toast.success(`Categoría "${name}" eliminada`);
   };
 
   const addConcept = async () => {
     if (!newConcept.trim()) return;
     if (settings.incomeConcepts.includes(newConcept.trim())) return;
-    await updateSettings({ incomeConcepts: [...settings.incomeConcepts, newConcept.trim()] });
+    const name = newConcept.trim();
+    await updateSettings({ incomeConcepts: [...settings.incomeConcepts, name] });
     setNewConcept('');
+    toast.success(`Concepto "${name}" añadido`);
   };
 
   const removeConcept = async (c: string) => {
@@ -256,7 +289,7 @@ export function Settings() {
           </div>
           <div>
             <label htmlFor="set-emergency" className="block text-xs text-th-muted mb-1.5">Colchon emergencia</label>
-            <input id="set-emergency" type="number" step="0.01" value={emergency} onChange={(e) => setEmergency(e.target.value)}
+            <input id="set-emergency" type="number" step="0.01" min="0" value={emergency} onChange={(e) => setEmergency(e.target.value)}
               className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none transition-colors" />
           </div>
           <div>
@@ -318,34 +351,109 @@ export function Settings() {
 
       {/* Categories */}
       <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border space-y-4 card-glow">
-        <h3 className="text-sm font-semibold text-th-text">Categorias de gasto</h3>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-th-text">Gestionar categorías</h3>
+          <motion.button
+            onClick={() => { setEditingCatId(null); setEditCatName(''); setEditCatColor('#a78bfa'); setEditCatIcon('circle'); setEditCatType('expense'); setEditCatBudget('0'); setShowAddCategory(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-purple/15 text-accent-purple rounded-lg text-xs font-medium hover:bg-accent-purple/25 transition-colors"
+            whileTap={{ scale: 0.97 }}
+          >
+            <Plus size={12} /> Nueva categoría
+          </motion.button>
+        </div>
+
+        {/* Add/Edit form */}
+        <AnimatePresence>
+          {showAddCategory && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="bg-th-hover rounded-lg p-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-th-muted mb-1">Nombre</label>
+                    <input type="text" value={editCatName} onChange={(e) => setEditCatName(e.target.value)}
+                      placeholder="Ej: Supermercado"
+                      className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-th-muted mb-1">Tipo</label>
+                    <select value={editCatType} onChange={(e) => setEditCatType(e.target.value as 'expense' | 'income' | 'both')}
+                      className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none">
+                      <option value="expense">Gasto</option>
+                      <option value="income">Ingreso</option>
+                      <option value="both">Ambos</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-th-muted mb-1">Color</label>
+                    <input type="color" value={editCatColor} onChange={(e) => setEditCatColor(e.target.value)}
+                      className="w-full h-8 rounded-lg cursor-pointer border border-th-border" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-th-muted mb-1">Icono</label>
+                    <input type="text" value={editCatIcon} onChange={(e) => setEditCatIcon(e.target.value)}
+                      placeholder="circle"
+                      className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-th-muted mb-1">Presupuesto</label>
+                    <input type="number" min="0" step="1" value={editCatBudget} onChange={(e) => setEditCatBudget(e.target.value)}
+                      className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <motion.button onClick={() => setShowAddCategory(false)}
+                    className="px-3 py-1.5 text-xs text-th-muted hover:text-th-text transition-colors" whileTap={{ scale: 0.95 }}>
+                    Cancelar
+                  </motion.button>
+                  <motion.button onClick={handleSaveCategory}
+                    className="px-3 py-1.5 bg-accent-purple text-white rounded-lg text-xs font-medium hover:bg-accent-purple/80 transition-colors"
+                    whileTap={{ scale: 0.95 }}>
+                    {editingCatId ? 'Guardar cambios' : 'Crear categoría'}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Category list */}
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
           <AnimatePresence>
-            {settings.categories.map((cat) => (
-              <motion.span key={cat}
-                className="flex items-center gap-1.5 text-xs bg-th-hover px-3 py-1.5 rounded-lg text-th-secondary"
-                initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}
-                layout>
-                {cat}
-                <motion.button onClick={() => removeCategory(cat)}
-                  className="text-th-muted hover:text-accent-red transition-colors"
-                  whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.8 }}
-                  aria-label={`Eliminar categoria ${cat}`}>
-                  <X size={12} />
+            {dbCategories.map((cat) => (
+              <motion.div key={cat.id}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-th-hover/50 group"
+                initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                layout
+              >
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                <span className="text-xs text-th-text flex-1 truncate">{cat.name}</span>
+                <span className="text-[10px] text-th-muted px-1.5 py-0.5 bg-th-hover rounded">
+                  {cat.type === 'expense' ? 'Gasto' : cat.type === 'income' ? 'Ingreso' : 'Ambos'}
+                </span>
+                {cat.monthly_budget > 0 && (
+                  <span className="text-[10px] text-th-muted font-mono">{cat.monthly_budget}€</span>
+                )}
+                <motion.button onClick={() => startEditCategory(cat)}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-th-muted hover:text-accent-purple transition-all"
+                  whileTap={{ scale: 0.8 }} aria-label={`Editar ${cat.name}`}>
+                  <Pencil size={12} />
                 </motion.button>
-              </motion.span>
+                <motion.button onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-th-muted hover:text-accent-red transition-all"
+                  whileTap={{ scale: 0.8 }} aria-label={`Eliminar ${cat.name}`}>
+                  <Trash2 size={12} />
+                </motion.button>
+              </motion.div>
             ))}
           </AnimatePresence>
-        </div>
-        <div className="flex gap-2">
-          <input type="text" value={newCategory} onChange={(e) => setNewCategory(e.target.value)}
-            placeholder="Nueva categoria" onKeyDown={(e) => e.key === 'Enter' && addCategory()}
-            className="flex-1 bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors" />
-          <motion.button onClick={addCategory}
-            className="px-3 py-2 bg-th-hover text-th-secondary rounded-lg hover:text-th-text transition-colors"
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}>
-            <Plus size={16} />
-          </motion.button>
+          {dbCategories.length === 0 && (
+            <p className="text-xs text-th-muted text-center py-4">No hay categorías. Crea la primera.</p>
+          )}
         </div>
       </motion.div>
 

@@ -13,7 +13,7 @@ interface Particle {
   drift: number;
 }
 
-export function FinancialBackground() {
+export function FinancialBackground({ subtle = false }: { subtle?: boolean } = {}) {
   const particles = useMemo<Particle[]>(() => {
     return Array.from({ length: 20 }, (_, i) => ({
       id: i,
@@ -51,7 +51,7 @@ export function FinancialBackground() {
       {particles.map((p) => (
         <div
           key={p.id}
-          className="fin-particle opacity-[0.07] dark:opacity-[0.07]"
+          className={`fin-particle ${subtle ? 'opacity-[0.03]' : 'opacity-[0.07]'}`}
           style={{
             left: `${p.x}%`,
             top: `${p.y}%`,

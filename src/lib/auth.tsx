@@ -138,12 +138,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', user.id)
       .select()
       .single();
+    if (error) {
+      console.error('[updateProfile] Error:', error.message, updates);
+    }
     if (data) setProfile(data as Profile);
   };
 
