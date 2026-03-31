@@ -42,6 +42,10 @@ export function FinancialBackground({ subtle = false }: { subtle?: boolean } = {
           position: absolute;
           animation: float-y var(--dur) ease-in-out infinite;
           animation-delay: var(--delay);
+          opacity: ${subtle ? 0.03 : 0.07};
+        }
+        html.light .fin-particle {
+          opacity: ${subtle ? 0.06 : 0.12};
         }
         .fin-particle-inner {
           animation: float-x calc(var(--dur) * 1.3) ease-in-out infinite;
@@ -51,7 +55,7 @@ export function FinancialBackground({ subtle = false }: { subtle?: boolean } = {
       {particles.map((p) => (
         <div
           key={p.id}
-          className={`fin-particle ${subtle ? 'opacity-[0.03]' : 'opacity-[0.07]'}`}
+          className="fin-particle"
           style={{
             left: `${p.x}%`,
             top: `${p.y}%`,

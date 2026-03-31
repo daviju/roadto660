@@ -39,14 +39,15 @@ const BOTTOM_NAV: NavItem[] = [
 ];
 
 function ThemeToggle() {
-  const { profile, updateProfile } = useAuth();
+  const { updateProfile } = useAuth();
+  const cachedTheme = useStore((s) => s.cachedTheme);
   const setCachedTheme = useStore((s) => s.setCachedTheme);
-  const theme = profile?.theme || 'dark';
+  const theme = cachedTheme || 'dark';
 
   const cycle = () => {
     const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
-    updateProfile({ theme: next });
     setCachedTheme(next);
+    updateProfile({ theme: next });
   };
 
   const Icon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
@@ -421,12 +422,12 @@ export function Sidebar() {
 
       {/* ─── Mobile bottom navigation ────────────────────── */}
       <nav
-        className="fixed bottom-0 left-0 right-0 md:hidden bg-th-card border-t border-th-border z-50 h-14"
+        className="fixed bottom-0 left-0 right-0 md:hidden bg-th-card border-t border-th-border/40 z-50"
         role="navigation"
         aria-label="Navegacion movil"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="flex items-stretch h-full">
+        <div className="flex items-stretch h-14">
           {BOTTOM_NAV.map(({ page, label, icon: Icon }) => {
             const isActive = currentPage === page;
             return (

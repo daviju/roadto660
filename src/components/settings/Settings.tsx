@@ -14,6 +14,7 @@ import { PrivacyPolicyModal } from '../legal/PrivacyPolicyModal';
 export function Settings() {
   const { settings, updateSettings, exportData, importData, resetData, setPage, categories: dbCategories, addCategory: addCategoryDb, updateCategory: updateCategoryDb, deleteCategory: deleteCategoryDb } = useAppData();
   const { profile, session, signOut } = useAuth();
+  const cachedTheme = useStore((s) => s.cachedTheme);
   const setCachedTheme = useStore((s) => s.setCachedTheme);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -265,12 +266,12 @@ export function Settings() {
               key={opt.value}
               onClick={() => handleThemeChange(opt.value)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                settings.theme === opt.value
+                cachedTheme === opt.value
                   ? 'bg-accent-purple text-white'
                   : 'bg-th-hover text-th-secondary hover:text-th-text'
               }`}
               whileTap={{ scale: 0.95 }}
-              aria-pressed={settings.theme === opt.value}
+              aria-pressed={cachedTheme === opt.value}
             >
               {opt.label}
             </motion.button>
@@ -304,7 +305,7 @@ export function Settings() {
           </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label htmlFor="set-target" className="block text-xs text-th-muted mb-1.5">Fecha objetivo</label>
             <input id="set-target" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)}
               className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors" />
@@ -586,9 +587,8 @@ export function Settings() {
               <input
                 type="checkbox"
                 checked={profile?.email_reports_enabled ?? false}
-                onChange={async (e) => {
-                  const { updateProfile } = await import('../../lib/auth').then(m => ({ updateProfile: m.useAuth }));
-                  // Use the context directly — this is simpler
+                onChange={() => {
+                  // email reports — coming soon
                 }}
                 className="w-4 h-4 rounded border-th-border text-accent-purple focus:ring-accent-purple/30 bg-th-input"
                 disabled

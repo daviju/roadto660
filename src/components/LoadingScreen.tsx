@@ -1,24 +1,33 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const TIMEOUT_MS = 10_000;
+type LoadPhase = 'loading' | 'connecting' | 'slow' | 'error';
+
+function getPhase(elapsed: number): LoadPhase {
+  if (elapsed < 3000) return 'loading';
+  if (elapsed < 8000) return 'connecting';
+  if (elapsed < 15000) return 'slow';
+  return 'error';
+}
+
+const PHASE_MESSAGES: Record<LoadPhase, string> = {
+  loading: 'Cargando...',
+  connecting: 'Conectando...',
+  slow: 'Esto está tardando más de lo normal...',
+  error: 'La carga está tardando demasiado',
+};
 
 export function LoadingScreen() {
-  const [timedOut, setTimedOut] = useState(false);
+  const [phase, setPhase] = useState<LoadPhase>('loading');
 
   useEffect(() => {
-    const timer = setTimeout(() => setTimedOut(true), TIMEOUT_MS);
-    return () => clearTimeout(timer);
+    const intervals = [
+      setTimeout(() => setPhase('connecting'), 3000),
+      setTimeout(() => setPhase('slow'), 8000),
+      setTimeout(() => setPhase('error'), 15000),
+    ];
+    return () => intervals.forEach(clearTimeout);
   }, []);
-
-  const handleRetry = () => {
-    window.location.reload();
-  };
-
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.reload();
-  };
 
   return (
     <div className="fixed inset-0 bg-th-bg flex flex-col items-center justify-center gap-8 z-50">
@@ -30,12 +39,12 @@ export function LoadingScreen() {
       >
         <span className="text-5xl">🏍️</span>
         <h1 className="text-3xl font-bold tracking-tight text-th-text">
-          Road<span className="text-accent-purple">To660</span>
+          Road<span className="text-accent-purple">To</span>
         </h1>
         <p className="text-th-muted text-sm">Tu planificador financiero</p>
       </motion.div>
 
-      {!timedOut ? (
+      {phase !== 'error' ? (
         <>
           <motion.div
             initial={{ opacity: 0 }}
@@ -45,14 +54,18 @@ export function LoadingScreen() {
             <div className="w-8 h-8 border-2 border-accent-purple/30 border-t-accent-purple rounded-full animate-spin" />
           </motion.div>
 
-          <motion.p
-            className="text-th-faint text-xs"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-          >
-            Cargando...
-          </motion.p>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={phase}
+              className="text-th-faint text-xs"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.3 }}
+            >
+              {PHASE_MESSAGES[phase]}
+            </motion.p>
+          </AnimatePresence>
         </>
       ) : (
         <motion.div
@@ -60,18 +73,16 @@ export function LoadingScreen() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <p className="text-th-muted text-sm">
-            La carga está tardando más de lo esperado
-          </p>
+          <p className="text-th-muted text-sm">{PHASE_MESSAGES.error}</p>
           <div className="flex gap-3">
             <button
-              onClick={handleRetry}
+              onClick={() => window.location.reload()}
               className="px-4 py-2 bg-accent-purple text-white rounded-lg text-sm font-medium hover:bg-accent-purple/90 transition-colors"
             >
               Reintentar
             </button>
             <button
-              onClick={handleLogout}
+              onClick={() => { localStorage.clear(); window.location.reload(); }}
               className="px-4 py-2 bg-th-card text-th-muted border border-th-border rounded-lg text-sm font-medium hover:text-th-text transition-colors"
             >
               Cerrar sesión
