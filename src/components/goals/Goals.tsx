@@ -57,6 +57,7 @@ export function Goals() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
 
   // CRUD state
@@ -105,6 +106,7 @@ export function Goals() {
         if (txRes.data) setTransactions(txRes.data);
       } catch (err) {
         console.error('[Goals] fetch failed:', err);
+        if (!cancelled) setFetchError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -381,6 +383,30 @@ export function Goals() {
   const progressInView = useInView(progressRef, { once: true, margin: '-50px' });
 
   // ─── Render ──────────────────────────────────────────────
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <Target size={32} className="text-th-faint" />
+        <p className="text-sm text-th-muted">Cargando datos del usuario...</p>
+      </div>
+    );
+  }
+
+  if (fetchError && goals.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+        <Target size={32} className="text-accent-red" />
+        <p className="text-sm text-th-text font-medium">Error al cargar las metas</p>
+        <button
+          onClick={() => { setFetchError(false); setLoading(true); }}
+          className="px-4 py-2 bg-accent-purple text-white rounded-lg text-sm hover:bg-accent-purple/90 transition-colors"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <motion.div

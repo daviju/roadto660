@@ -1,7 +1,7 @@
 {
-  "name": "RoadTo660",
-  "short_name": "R660",
-  "description": "Plan de ahorro para la moto",
+  "name": "RoadTo",
+  "short_name": "RoadTo",
+  "description": "Tu planificador financiero",
   "start_url": "/roadto660/",
   "display": "standalone",
   "background_color": "#0f1117",

@@ -457,9 +457,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const addExpense = useCallback(
     async (expense: Omit<Expense, 'id'>) => {
-      if (!user) return;
+      if (!user) { console.warn('[DataProvider] addExpense: no user'); return; }
       const categoryId = await findOrCreateCategory(expense.category, 'expense');
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('transactions')
         .insert({
           user_id: user.id,
@@ -472,6 +472,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         })
         .select()
         .single();
+      if (error) console.error('[DataProvider] addExpense error:', error.message);
       if (data) {
         setTransactions((prev) => [data as Transaction, ...prev]);
       }
@@ -501,7 +502,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         source: 'manual' as const,
       }));
 
-      const { data } = await supabase.from('transactions').insert(rows).select();
+      const { data, error } = await supabase.from('transactions').insert(rows).select();
+      if (error) console.error('[DataProvider] addExpenses error:', error.message);
       if (data) {
         setTransactions((prev) => [...(data as Transaction[]), ...prev]);
       }
@@ -511,7 +513,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateExpense = useCallback(
     async (id: string, updates: Partial<Expense>) => {
-      if (!user) return;
+      if (!user) { console.warn('[DataProvider] updateExpense: no user'); return; }
       const patch: Record<string, unknown> = {};
       if (updates.amount !== undefined) patch.amount = updates.amount;
       if (updates.date !== undefined) patch.transaction_date = updates.date;

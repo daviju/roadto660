@@ -272,6 +272,21 @@ export function AdminPanel() {
   };
 
   // ─── Access guard ─────────────────────────────────────
+  if (!currentProfile) {
+    return (
+      <motion.div
+        className="flex items-center justify-center min-h-[60vh]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-accent-purple/30 border-t-accent-purple rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-th-muted">Cargando perfil...</p>
+        </div>
+      </motion.div>
+    );
+  }
+
   if (!isAdmin) {
     return (
       <motion.div

@@ -35,7 +35,7 @@ export function BannedScreen() {
 
           <div className="space-y-3">
             <a
-              href="mailto:soporte@roadto660.com"
+              href="mailto:soporte@roadto.app"
               className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-th-input border border-th-border rounded-xl text-th-text text-sm hover:bg-th-hover transition-colors"
             >
               <Mail size={16} />

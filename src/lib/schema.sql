@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- RoadTo660 - Esquema completo de base de datos (Supabase)
+-- RoadTo - Esquema completo de base de datos (Supabase)
 -- Ejecutar en Supabase SQL Editor en orden
 -- ═══════════════════════════════════════════════════════════════
 
