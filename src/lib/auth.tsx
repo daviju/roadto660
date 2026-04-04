@@ -37,11 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    let resolved = false;
+    let initialResolved = false;
 
-    const resolve = async (s: Session | null) => {
-      if (!mounted || resolved) return;
-      resolved = true;
+    const handleSession = async (s: Session | null) => {
+      if (!mounted) return;
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
@@ -56,45 +55,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) setLoading(false);
     };
 
-    // Primary: onAuthStateChange fires INITIAL_SESSION immediately from localStorage cache
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, s) => {
+      (event, s) => {
         if (!mounted) return;
+
         if (event === 'INITIAL_SESSION') {
-          await resolve(s);
-        } else if (event === 'SIGNED_IN') {
-          setSession(s);
-          setUser(s?.user ?? null);
-          if (s?.user) {
-            try { await fetchProfile(s.user.id); } catch (e) { /* ignore */ }
+          initialResolved = true;
+          if (!s) {
+            // No session → go to login immediately (synchronous, no await)
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+          } else {
+            // Session exists → load profile (async)
+            handleSession(s);
           }
-          if (mounted) setLoading(false);
+          return;
+        }
+
+        if (event === 'SIGNED_IN') {
+          handleSession(s);
         } else if (event === 'SIGNED_OUT') {
           setSession(null);
           setUser(null);
           setProfile(null);
-          if (mounted) setLoading(false);
+          setLoading(false);
         } else if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          setSession(s);
-          setUser(s?.user ?? null);
           if (s?.user) {
-            try { await fetchProfile(s.user.id); } catch (e) { /* ignore */ }
+            setSession(s);
+            setUser(s.user);
+            fetchProfile(s.user.id).catch(() => {});
           }
         }
       }
     );
 
-    // Safety timeout at 15s: if INITIAL_SESSION never fired, try getSession() once
-    const timeout = setTimeout(async () => {
-      if (!mounted || resolved) return;
-      console.warn('[Auth] INITIAL_SESSION did not fire after 15s, falling back to getSession()');
-      try {
-        const { data: { session: s } } = await supabase.auth.getSession();
-        await resolve(s);
-      } catch (e) {
-        console.error('[Auth] getSession fallback failed:', e);
-        await resolve(null);
-      }
+    // Safety: if INITIAL_SESSION never fires (Supabase bug), fall back after 15s
+    const timeout = setTimeout(() => {
+      if (!mounted || initialResolved) return;
+      console.warn('[Auth] INITIAL_SESSION never fired after 15s, falling back');
+      supabase.auth.getSession().then(({ data: { session: s } }) => {
+        if (mounted && !initialResolved) handleSession(s);
+      }).catch(() => {
+        if (mounted && !initialResolved) {
+          setLoading(false);
+        }
+      });
     }, 15000);
 
     return () => {
