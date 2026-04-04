@@ -229,7 +229,7 @@ function toMotorcycles(goals: Goal[]): Motorcycle[] {
 }
 
 function buildSettings(
-  profile: { monthly_income?: number; pay_day?: number; emergency_fund?: number; current_balance?: number; theme?: string } | null,
+  profile: { monthly_income?: number; pay_day?: number; emergency_fund?: number; theme?: string } | null,
   cats: Category[],
   extra: ExtraSettings,
 ): AppSettings {
@@ -242,13 +242,9 @@ function buildSettings(
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((c) => c.name);
 
-  // Profile current_balance takes precedence over localStorage snapshot
-  const currentBalance = profile?.current_balance != null && profile.current_balance > 0
-    ? Number(profile.current_balance)
-    : extra.currentBalance;
-
+  // currentBalance comes from localStorage / balance_snapshots (not a profiles column)
   return {
-    currentBalance,
+    currentBalance: extra.currentBalance,
     emergencyFund: Number(profile?.emergency_fund ?? DEFAULT_SETTINGS.emergencyFund),
     monthlyIncome: Number(profile?.monthly_income ?? DEFAULT_SETTINGS.monthlyIncome),
     cashbackNet: extra.cashbackNet,
@@ -375,13 +371,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = useCallback(
     async (updates: Partial<AppSettings>) => {
-      // Profile-backed fields
+      // Profile-backed fields (only columns that exist in the profiles table)
       const profileUpdates: Record<string, unknown> = {};
       if (updates.emergencyFund !== undefined) profileUpdates.emergency_fund = updates.emergencyFund;
       if (updates.monthlyIncome !== undefined) profileUpdates.monthly_income = updates.monthlyIncome;
       if (updates.payDay !== undefined) profileUpdates.pay_day = updates.payDay;
       if (updates.theme !== undefined) profileUpdates.theme = updates.theme;
-      if (updates.currentBalance !== undefined) profileUpdates.current_balance = updates.currentBalance;
+      // NOTE: current_balance is NOT a column in profiles — stored in balance_snapshots + localStorage
 
       if (Object.keys(profileUpdates).length > 0) {
         await updateProfile(profileUpdates);

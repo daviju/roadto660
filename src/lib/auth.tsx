@@ -138,16 +138,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
+  const VALID_PROFILE_COLUMNS = new Set([
+    'full_name', 'avatar_url', 'monthly_income', 'pay_day', 'emergency_fund',
+    'currency', 'theme', 'module_expenses', 'module_income', 'module_budgets',
+    'module_timeline', 'module_motorcycles', 'module_charts', 'module_tips',
+    'module_simulator', 'onboarding_completed', 'points', 'streak_days',
+    'last_active_date', 'updated_at',
+  ]);
+
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return;
+    // Filter to only valid DB columns to prevent Supabase 400 errors
+    const clean: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    for (const [key, value] of Object.entries(updates)) {
+      if (VALID_PROFILE_COLUMNS.has(key)) clean[key] = value;
+    }
     const { data, error } = await supabase
       .from('profiles')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(clean)
       .eq('id', user.id)
       .select()
       .single();
     if (error) {
-      console.error('[updateProfile] Error:', error.message, updates);
+      console.error('[updateProfile] Error:', error.message, clean);
     }
     if (data) setProfile(data as Profile);
   };

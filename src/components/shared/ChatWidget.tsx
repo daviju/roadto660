@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Bot, Send, User } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency } from '../../utils/format';
+import type { Category } from '../../types';
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -13,294 +14,467 @@ interface ChatMessage {
   type?: 'info' | 'tip' | 'warning' | 'success';
 }
 
-interface UserData {
+interface Period {
+  start: Date;
+  end: Date;
+  label: string;
+}
+
+interface FinData {
   expenses: { date: string; amount: number; category: string }[];
   incomes: { date: string; amount: number }[];
   budgets: { category: string; limit: number }[];
-  settings: {
-    currentBalance: number;
-    emergencyFund: number;
-    monthlyIncome: number;
-  };
+  categories: Category[];
+  settings: { currentBalance: number; emergencyFund: number; monthlyIncome: number };
   motorcycles: { name: string; price: number; active: boolean }[];
 }
 
-// ── Suggested questions (chips) ─────────────────────────────────
+// ── Chips ───────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
-  { label: 'Cuando puedo comprar mi meta?', icon: '🎯' },
-  { label: 'En que gasto mas?', icon: '📊' },
-  { label: 'Como voy este mes?', icon: '📅' },
-  { label: 'Cuanto he ahorrado?', icon: '💰' },
-  { label: 'Que categorias me paso?', icon: '⚠️' },
+  'Cuando compro mi meta?',
+  'Resumen del mes',
+  'Donde gasto mas?',
+  'Como va mi ahorro?',
+  'Comparar meses',
+  'Presupuestos',
 ];
 
-// ── Helpers ─────────────────────────────────────────────────────
+// ── Period detection ────────────────────────────────────────────
 
-function getCurrentMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+const MONTH_NAMES: Record<string, number> = {
+  enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+  julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11,
+};
 
-function getMonthExpenses(expenses: UserData['expenses'], month: string) {
-  return expenses.filter((e) => e.date.startsWith(month));
-}
-
-function getMonthIncomes(incomes: UserData['incomes'], month: string) {
-  return incomes.filter((i) => i.date.startsWith(month));
-}
-
-function getAvgMonthlySavings(data: UserData): number {
+function detectPeriod(text: string): Period | null {
+  const lower = text.toLowerCase();
   const now = new Date();
-  const months: number[] = [];
+
+  for (const [name, month] of Object.entries(MONTH_NAMES)) {
+    if (lower.includes(name)) {
+      const year = month > now.getMonth() ? now.getFullYear() - 1 : now.getFullYear();
+      return {
+        start: new Date(year, month, 1),
+        end: new Date(year, month + 1, 0, 23, 59, 59),
+        label: `${name} ${year}`,
+      };
+    }
+  }
+
+  if (/este mes|mes actual/.test(lower)) {
+    return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now, label: 'este mes' };
+  }
+
+  if (/mes pasado|mes anterior|ultimo mes|último mes/.test(lower)) {
+    const m = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+    const y = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    return { start: new Date(y, m, 1), end: new Date(y, m + 1, 0, 23, 59, 59), label: 'el mes pasado' };
+  }
+
+  if (/primer trimestre|q1|enero.*marzo/.test(lower)) {
+    return { start: new Date(now.getFullYear(), 0, 1), end: new Date(now.getFullYear(), 2, 31, 23, 59, 59), label: 'Q1 ' + now.getFullYear() };
+  }
+  if (/segundo trimestre|q2|abril.*junio/.test(lower)) {
+    return { start: new Date(now.getFullYear(), 3, 1), end: new Date(now.getFullYear(), 5, 30, 23, 59, 59), label: 'Q2 ' + now.getFullYear() };
+  }
+  if (/tercer trimestre|q3|julio.*septiembre/.test(lower)) {
+    return { start: new Date(now.getFullYear(), 6, 1), end: new Date(now.getFullYear(), 8, 30, 23, 59, 59), label: 'Q3 ' + now.getFullYear() };
+  }
+  if (/cuarto trimestre|q4|octubre.*diciembre/.test(lower)) {
+    return { start: new Date(now.getFullYear(), 9, 1), end: new Date(now.getFullYear(), 11, 31, 23, 59, 59), label: 'Q4 ' + now.getFullYear() };
+  }
+
+  const lastN = lower.match(/(?:ultimos?|últimos?)\s+(\d+)\s+mes/);
+  if (lastN) {
+    const n = parseInt(lastN[1]);
+    return { start: new Date(now.getFullYear(), now.getMonth() - n, 1), end: now, label: `los ultimos ${n} meses` };
+  }
+
+  if (/este a[nñ]o|2026/.test(lower)) {
+    return { start: new Date(now.getFullYear(), 0, 1), end: now, label: 'este ano' };
+  }
+
+  if (/global|todo|siempre|total|general|historial/.test(lower)) {
+    return { start: new Date(2020, 0, 1), end: now, label: 'todo el historial' };
+  }
+
+  return null;
+}
+
+// ── Category detection ──────────────────────────────────────────
+
+function detectCategory(text: string, categories: Category[]): Category | null {
+  const lower = text.toLowerCase();
+  for (const cat of categories) {
+    if (lower.includes(cat.name.toLowerCase())) return cat;
+    if (cat.slug && lower.includes(cat.slug.replace(/-/g, ' '))) return cat;
+  }
+  const aliases: [RegExp, string][] = [
+    [/comer|restaur|comida fuera/, 'comer-fuera'],
+    [/super|mercadona|eroski|compra/, 'supermercado'],
+    [/suscrip|netflix|spotify|hbo/, 'suscripciones'],
+    [/tabaco|vaper/, 'tabaco-vaper'],
+    [/gaming|juego|steam|playstation/, 'gaming'],
+    [/gasolina|combustible|gasoil/, 'gasolina'],
+    [/transporte|bus|metro|tren/, 'transporte'],
+  ];
+  for (const [re, slug] of aliases) {
+    if (re.test(lower)) {
+      const match = categories.find((c) => c.slug === slug);
+      if (match) return match;
+    }
+  }
+  return null;
+}
+
+// ── Data filters ────────────────────────────────────────────────
+
+function filterByPeriod<T extends { date: string }>(items: T[], period: Period): T[] {
+  return items.filter((item) => {
+    const d = new Date(item.date);
+    return d >= period.start && d <= period.end;
+  });
+}
+
+function defaultPeriod(): Period {
+  const now = new Date();
+  return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now, label: 'este mes' };
+}
+
+// ── Calculation helpers ─────────────────────────────────────────
+
+function getAvgMonthlySavings(data: FinData): number {
+  const now = new Date();
+  const vals: number[] = [];
   for (let i = 1; i <= 3; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const inc = getMonthIncomes(data.incomes, m).reduce((s, x) => s + x.amount, 0);
-    const exp = getMonthExpenses(data.expenses, m).reduce((s, x) => s + x.amount, 0);
-    months.push(inc - exp);
+    const inc = data.incomes.filter((x) => x.date.startsWith(m)).reduce((s, x) => s + x.amount, 0);
+    const exp = data.expenses.filter((x) => x.date.startsWith(m)).reduce((s, x) => s + x.amount, 0);
+    if (inc > 0 || exp > 0) vals.push(inc - exp);
   }
-  if (months.length === 0) return data.settings.monthlyIncome * 0.3;
-  return months.reduce((a, b) => a + b, 0) / months.length;
+  if (vals.length === 0) return data.settings.monthlyIncome * 0.3;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-function formatMonth(dateStr: string): string {
-  const d = new Date(dateStr + '-01');
-  return d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+function groupByCategory(expenses: { amount: number; category: string }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const e of expenses) m.set(e.category, (m.get(e.category) || 0) + e.amount);
+  return m;
 }
 
-// ── Rule-based engine ───────────────────────────────────────────
+// ── Response functions ──────────────────────────────────────────
 
-function processMessage(input: string, data: UserData): { text: string; type: 'info' | 'tip' | 'warning' | 'success' } {
-  const text = input.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+type Resp = { text: string; type: 'info' | 'tip' | 'warning' | 'success' };
 
-  // 1. When can I buy my goal?
-  if (/cuando|puedo comprar|fecha.*meta|llegar|alcanz/.test(text)) {
-    return calculateGoalDate(data);
-  }
+function goalProjection(data: FinData): Resp {
+  const goal = data.motorcycles.find((m) => m.active);
+  if (!goal) return { text: 'No tienes ninguna meta activa. Ve a Metas y activa una para que pueda calcular.', type: 'info' };
 
-  // 2. What-if: cut spending
-  if (/recort|si reduzco|si bajo|si ahorro|que pasa si/.test(text)) {
-    return calculateCutScenario(text, data);
-  }
-
-  // 3. Where do I spend most?
-  if (/gasto mas|gasto más|donde gasto|en que gasto|top.*gasto/.test(text)) {
-    return getTopExpenses(data);
-  }
-
-  // 4. How am I doing this month?
-  if (/como voy|resumen|este mes/.test(text)) {
-    return getMonthSummary(data);
-  }
-
-  // 5. How much have I saved?
-  if (/ahorrado|ahorro total|cuanto tengo|saldo/.test(text)) {
-    return getSavingsTotal(data);
-  }
-
-  // 6. Which categories am I over budget?
-  if (/me paso|presupuesto|excedo|por encima/.test(text)) {
-    return getBudgetAlerts(data);
-  }
-
-  return {
-    text: 'No he entendido tu pregunta. Prueba con:\n\n' +
-      '\u2022 Cuando puedo comprar mi meta?\n' +
-      '\u2022 En que gasto mas?\n' +
-      '\u2022 Como voy este mes?\n' +
-      '\u2022 Cuanto he ahorrado?\n' +
-      '\u2022 Que categorias me paso?',
-    type: 'info',
-  };
-}
-
-function calculateGoalDate(data: UserData): { text: string; type: 'info' | 'tip' | 'warning' | 'success' } {
-  const activeGoal = data.motorcycles.find((m) => m.active);
-  if (!activeGoal) {
-    return { text: 'No tienes ninguna meta activa. Ve a Metas y activa una para que pueda calcular.', type: 'info' };
-  }
-
-  const avgSaving = getAvgMonthlySavings(data);
+  const avg = getAvgMonthlySavings(data);
   const available = Math.max(0, data.settings.currentBalance - data.settings.emergencyFund);
-  const remaining = Math.max(0, activeGoal.price - available);
+  const remaining = Math.max(0, goal.price - available);
 
   if (remaining <= 0) {
-    return { text: `Ya tienes suficiente para ${activeGoal.name}! Tienes ${formatCurrency(available)} disponibles y necesitas ${formatCurrency(activeGoal.price)}.`, type: 'success' };
+    return { text: `Ya tienes suficiente para ${goal.name}. Tienes ${formatCurrency(available)} disponibles y necesitas ${formatCurrency(goal.price)}.`, type: 'success' };
+  }
+  if (avg <= 0) {
+    return { text: `Con tu ritmo actual no estas ahorrando. Necesitas ${formatCurrency(remaining)} mas para ${goal.name}.`, type: 'warning' };
   }
 
-  if (avgSaving <= 0) {
-    return { text: `Con tu ritmo actual no estas ahorrando. Necesitas ${formatCurrency(remaining)} mas para ${activeGoal.name}. Intenta recortar gastos.`, type: 'warning' };
-  }
-
-  const monthsNeeded = Math.ceil(remaining / avgSaving);
-  const targetDate = new Date();
-  targetDate.setMonth(targetDate.getMonth() + monthsNeeded);
-  const dateStr = targetDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const months = Math.ceil(remaining / avg);
+  const target = new Date();
+  target.setMonth(target.getMonth() + months);
+  const dateStr = target.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 
   return {
-    text: `A tu ritmo actual (${formatCurrency(avgSaving)}/mes de ahorro), llegarias a los ${formatCurrency(activeGoal.price)} de ${activeGoal.name} en ${dateStr} (${monthsNeeded} meses).`,
+    text: `A tu ritmo actual (${formatCurrency(avg)}/mes), llegarias a los ${formatCurrency(goal.price)} de ${goal.name} en ${dateStr} (${months} meses).\n\nTe faltan ${formatCurrency(remaining)}. Tienes ${formatCurrency(available)} disponibles.`,
     type: 'info',
   };
 }
 
-function calculateCutScenario(input: string, data: UserData): { text: string; type: 'info' | 'tip' | 'warning' | 'success' } {
-  // Try to extract amount
+function goalRemaining(data: FinData): Resp {
+  const goal = data.motorcycles.find((m) => m.active);
+  if (!goal) return { text: 'No tienes ninguna meta activa.', type: 'info' };
+
+  const available = Math.max(0, data.settings.currentBalance - data.settings.emergencyFund);
+  const remaining = Math.max(0, goal.price - available);
+  const pct = goal.price > 0 ? Math.round((available / goal.price) * 100) : 0;
+
+  return {
+    text: `Meta: ${goal.name} (${formatCurrency(goal.price)})\nAhorrado: ${formatCurrency(available)} (${pct}%)\nFalta: ${formatCurrency(remaining)}`,
+    type: remaining <= 0 ? 'success' : 'info',
+  };
+}
+
+function cutScenario(input: string, data: FinData): Resp {
   const amountMatch = input.match(/(\d+)/);
-  const cutAmount = amountMatch ? parseInt(amountMatch[1]) : 50;
+  const cut = amountMatch ? parseInt(amountMatch[1]) : 50;
+  const avg = getAvgMonthlySavings(data);
+  const newAvg = avg + cut;
 
-  const activeGoal = data.motorcycles.find((m) => m.active);
-  const avgSaving = getAvgMonthlySavings(data);
-  const newSaving = avgSaving + cutAmount;
-
+  const goal = data.motorcycles.find((m) => m.active);
   let goalPart = '';
-  if (activeGoal) {
+  if (goal) {
     const available = Math.max(0, data.settings.currentBalance - data.settings.emergencyFund);
-    const remaining = Math.max(0, activeGoal.price - available);
-    if (remaining > 0 && newSaving > 0) {
-      const monthsBefore = avgSaving > 0 ? Math.ceil(remaining / avgSaving) : Infinity;
-      const monthsAfter = Math.ceil(remaining / newSaving);
-      const saved = monthsBefore !== Infinity ? monthsBefore - monthsAfter : 0;
-      goalPart = saved > 0
-        ? ` Llegarias a ${activeGoal.name} ${saved} ${saved === 1 ? 'mes' : 'meses'} antes.`
-        : '';
+    const remaining = Math.max(0, goal.price - available);
+    if (remaining > 0 && newAvg > 0) {
+      const before = avg > 0 ? Math.ceil(remaining / avg) : Infinity;
+      const after = Math.ceil(remaining / newAvg);
+      const saved = before !== Infinity ? before - after : 0;
+      if (saved > 0) goalPart = `\nLlegarias a ${goal.name} ${saved} ${saved === 1 ? 'mes' : 'meses'} antes.`;
     }
   }
 
   return {
-    text: `Si recortas ${formatCurrency(cutAmount)}/mes, tu ahorro sube de ${formatCurrency(avgSaving)} a ${formatCurrency(newSaving)}/mes.${goalPart}`,
+    text: `Si recortas ${formatCurrency(cut)}/mes, tu ahorro pasa de ${formatCurrency(avg)} a ${formatCurrency(newAvg)}/mes.${goalPart}`,
     type: 'tip',
   };
 }
 
-function getTopExpenses(data: UserData): { text: string; type: 'info' | 'tip' | 'warning' | 'success' } {
-  const month = getCurrentMonth();
-  const monthExp = getMonthExpenses(data.expenses, month);
+function periodSummary(data: FinData, period: Period): Resp {
+  const exp = filterByPeriod(data.expenses, period);
+  const inc = filterByPeriod(data.incomes, period);
+  const totalExp = exp.reduce((s, e) => s + e.amount, 0);
+  const totalInc = inc.reduce((s, i) => s + i.amount, 0);
+  const balance = totalInc - totalExp;
+  const savingsRate = totalInc > 0 ? Math.round((balance / totalInc) * 100) : 0;
 
-  if (monthExp.length === 0) {
-    return { text: `No hay gastos registrados en ${formatMonth(month)}.`, type: 'info' };
+  const budgetTotal = data.budgets.reduce((s, b) => s + b.limit, 0);
+  let budgetLine = '';
+  if (budgetTotal > 0) {
+    const pct = Math.round((totalExp / budgetTotal) * 100);
+    budgetLine = pct > 100
+      ? `\nPresupuesto: ${pct - 100}% por encima`
+      : `\nPresupuesto: ${pct}% usado`;
   }
 
-  const byCategory = new Map<string, number>();
-  for (const e of monthExp) {
-    byCategory.set(e.category, (byCategory.get(e.category) || 0) + e.amount);
-  }
-
-  const sorted = [...byCategory.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const lines = sorted.map(([cat, amt], i) => `${i + 1}. ${cat}: ${formatCurrency(amt)}`);
+  const type: Resp['type'] = balance >= 0 ? 'success' : 'warning';
 
   return {
-    text: `Tus mayores gastos en ${formatMonth(month)}:\n\n${lines.join('\n')}`,
+    text: `Resumen de ${period.label}:\n\nIngresos: ${formatCurrency(totalInc)}\nGastos: ${formatCurrency(totalExp)}\nBalance: ${formatCurrency(balance)} (tasa de ahorro: ${savingsRate}%)${budgetLine}`,
+    type,
+  };
+}
+
+function topExpenses(data: FinData, period: Period, specificCat: Category | null): Resp {
+  const exp = filterByPeriod(data.expenses, period);
+
+  if (specificCat) {
+    const catExp = exp.filter((e) => e.category === specificCat.name);
+    const total = catExp.reduce((s, e) => s + e.amount, 0);
+    if (total === 0) return { text: `No hay gastos en ${specificCat.name} en ${period.label}.`, type: 'info' };
+    return { text: `Gasto en ${specificCat.name} en ${period.label}: ${formatCurrency(total)} (${catExp.length} transacciones)`, type: 'info' };
+  }
+
+  if (exp.length === 0) return { text: `No hay gastos registrados en ${period.label}.`, type: 'info' };
+
+  const byCat = groupByCategory(exp);
+  const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const total = exp.reduce((s, e) => s + e.amount, 0);
+  const lines = sorted.map(([cat, amt], i) => {
+    const pct = Math.round((amt / total) * 100);
+    return `${i + 1}. ${cat}: ${formatCurrency(amt)} (${pct}%)`;
+  });
+
+  return { text: `Top gastos en ${period.label}:\n\n${lines.join('\n')}\n\nTotal: ${formatCurrency(total)}`, type: 'info' };
+}
+
+function savingsSummary(data: FinData, period: Period | null): Resp {
+  if (!period) {
+    const balance = data.settings.currentBalance;
+    const emergency = data.settings.emergencyFund;
+    const available = Math.max(0, balance - emergency);
+    const avg = getAvgMonthlySavings(data);
+
+    return {
+      text: `Saldo en cuenta: ${formatCurrency(balance)}\nColchon de emergencia: ${formatCurrency(emergency)}\nDisponible para metas: ${formatCurrency(available)}\nAhorro medio mensual: ${formatCurrency(avg)}/mes`,
+      type: available > 0 ? 'success' : 'info',
+    };
+  }
+
+  const exp = filterByPeriod(data.expenses, period);
+  const inc = filterByPeriod(data.incomes, period);
+  const totalExp = exp.reduce((s, e) => s + e.amount, 0);
+  const totalInc = inc.reduce((s, i) => s + i.amount, 0);
+  const saved = totalInc - totalExp;
+  const rate = totalInc > 0 ? Math.round((saved / totalInc) * 100) : 0;
+
+  return {
+    text: `Ahorro en ${period.label}: ${formatCurrency(saved)}\nTasa de ahorro: ${rate}%\nIngresos: ${formatCurrency(totalInc)}\nGastos: ${formatCurrency(totalExp)}`,
+    type: saved >= 0 ? 'success' : 'warning',
+  };
+}
+
+function budgetAlerts(data: FinData, period: Period): Resp {
+  const exp = filterByPeriod(data.expenses, period);
+  const byCat = groupByCategory(exp);
+  const over: string[] = [];
+  const under: string[] = [];
+
+  for (const b of data.budgets) {
+    if (b.limit <= 0) continue;
+    const spent = byCat.get(b.category) || 0;
+    const pct = Math.round((spent / b.limit) * 100);
+    if (spent > b.limit) {
+      over.push(`${b.category}: ${formatCurrency(spent)} / ${formatCurrency(b.limit)} (${pct}%)`);
+    } else {
+      under.push(`${b.category}: ${formatCurrency(spent)} / ${formatCurrency(b.limit)} (${pct}%)`);
+    }
+  }
+
+  if (over.length === 0 && under.length === 0) {
+    return { text: 'No hay presupuestos configurados. Puedes crearlos en Ajustes.', type: 'info' };
+  }
+  if (over.length === 0) {
+    return { text: `Todos los presupuestos van bien en ${period.label}.\n\n${under.join('\n')}`, type: 'success' };
+  }
+
+  let text = `Categorias por encima del presupuesto en ${period.label}:\n\n${over.join('\n')}`;
+  if (under.length > 0) text += `\n\nDentro de presupuesto:\n${under.join('\n')}`;
+
+  return { text, type: 'warning' };
+}
+
+function comparePeriods(data: FinData, text: string): Resp {
+  const now = new Date();
+  const curMonth = now.getMonth();
+  const curYear = now.getFullYear();
+
+  // Try to find two months in text
+  const foundMonths: { name: string; idx: number }[] = [];
+  for (const [name, idx] of Object.entries(MONTH_NAMES)) {
+    if (text.toLowerCase().includes(name)) foundMonths.push({ name, idx });
+  }
+
+  let p1: Period, p2: Period;
+
+  if (foundMonths.length >= 2) {
+    const [a, b] = foundMonths;
+    const yearA = a.idx > curMonth ? curYear - 1 : curYear;
+    const yearB = b.idx > curMonth ? curYear - 1 : curYear;
+    p1 = { start: new Date(yearA, a.idx, 1), end: new Date(yearA, a.idx + 1, 0, 23, 59, 59), label: a.name };
+    p2 = { start: new Date(yearB, b.idx, 1), end: new Date(yearB, b.idx + 1, 0, 23, 59, 59), label: b.name };
+  } else {
+    // Default: this month vs last month
+    const prevM = curMonth === 0 ? 11 : curMonth - 1;
+    const prevY = curMonth === 0 ? curYear - 1 : curYear;
+    const curName = Object.entries(MONTH_NAMES).find(([, v]) => v === curMonth)?.[0] || 'este mes';
+    const prevName = Object.entries(MONTH_NAMES).find(([, v]) => v === prevM)?.[0] || 'mes pasado';
+    p1 = { start: new Date(prevY, prevM, 1), end: new Date(prevY, prevM + 1, 0, 23, 59, 59), label: prevName };
+    p2 = { start: new Date(curYear, curMonth, 1), end: now, label: curName };
+  }
+
+  const exp1 = filterByPeriod(data.expenses, p1).reduce((s, e) => s + e.amount, 0);
+  const exp2 = filterByPeriod(data.expenses, p2).reduce((s, e) => s + e.amount, 0);
+  const inc1 = filterByPeriod(data.incomes, p1).reduce((s, i) => s + i.amount, 0);
+  const inc2 = filterByPeriod(data.incomes, p2).reduce((s, i) => s + i.amount, 0);
+  const sav1 = inc1 - exp1;
+  const sav2 = inc2 - exp2;
+  const diff = exp2 - exp1;
+  const dir = diff > 0 ? 'mas' : 'menos';
+  const pct = exp1 > 0 ? Math.abs(Math.round((diff / exp1) * 100)) : 0;
+
+  return {
+    text: `Comparacion ${p1.label} vs ${p2.label}:\n\n${p1.label}:\n  Gastos: ${formatCurrency(exp1)}\n  Ingresos: ${formatCurrency(inc1)}\n  Ahorro: ${formatCurrency(sav1)}\n\n${p2.label}:\n  Gastos: ${formatCurrency(exp2)}\n  Ingresos: ${formatCurrency(inc2)}\n  Ahorro: ${formatCurrency(sav2)}\n\nGastaste ${formatCurrency(Math.abs(diff))} ${dir} (${pct}%)`,
+    type: diff <= 0 ? 'success' : 'tip',
+  };
+}
+
+// ── Main router ─────────────────────────────────────────────────
+
+function processMessage(input: string, data: FinData): Resp {
+  const norm = input.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // Goals & projections
+  if (/cuando.*meta|cuando.*compro|cuando llego|fecha.*meta|plazo/.test(norm)) {
+    return goalProjection(data);
+  }
+  if (/cuanto.*falta|me falta|falta para/.test(norm)) {
+    return goalRemaining(data);
+  }
+  if (/recort|si reduzco|si bajo|si ahorro|que pasa si/.test(norm)) {
+    return cutScenario(norm, data);
+  }
+
+  // Comparisons
+  if (/compar|vs|versus|mas o menos|mas que|menos que|evolucion/.test(norm)) {
+    return comparePeriods(data, norm);
+  }
+
+  // Detect period and category for context-aware responses
+  const period = detectPeriod(norm);
+  const cat = detectCategory(norm, data.categories);
+
+  // Expense queries
+  if (/gasto mas|donde gasto|en que gasto|top.*gasto|cuanto.*gast|se me va/.test(norm)) {
+    return topExpenses(data, period || defaultPeriod(), cat);
+  }
+
+  // Period summary
+  if (/como voy|resumen|como fue|como va/.test(norm)) {
+    return periodSummary(data, period || defaultPeriod());
+  }
+
+  // Savings
+  if (/ahorr|cuanto tengo|saldo|tasa.*ahorro/.test(norm)) {
+    return savingsSummary(data, period);
+  }
+
+  // Budgets
+  if (/me paso|presupuesto|excedo|por encima|voy bien/.test(norm)) {
+    return budgetAlerts(data, period || defaultPeriod());
+  }
+
+  // If we detect a period but no clear intent, give a summary
+  if (period) {
+    return periodSummary(data, period);
+  }
+
+  // If we detect a category but no clear intent, give category spending
+  if (cat) {
+    return topExpenses(data, defaultPeriod(), cat);
+  }
+
+  return {
+    text: 'No he entendido tu pregunta. Puedes preguntar cosas como:\n\n' +
+      '- Cuando puedo comprar mi meta?\n' +
+      '- Resumen de marzo\n' +
+      '- En que gasto mas?\n' +
+      '- Como va mi ahorro?\n' +
+      '- Compara enero con febrero\n' +
+      '- Presupuestos',
     type: 'info',
   };
 }
 
-function getMonthSummary(data: UserData): { text: string; type: 'info' | 'tip' | 'warning' | 'success' } {
-  const month = getCurrentMonth();
-  const monthExp = getMonthExpenses(data.expenses, month);
-  const monthInc = getMonthIncomes(data.incomes, month);
+// ── UI ──────────────────────────────────────────────────────────
 
-  const totalExp = monthExp.reduce((s, e) => s + e.amount, 0);
-  const totalInc = monthInc.reduce((s, i) => s + i.amount, 0);
-  const balance = totalInc - totalExp;
-
-  const totalBudget = data.budgets.reduce((s, b) => s + b.limit, 0);
-
-  let status: 'info' | 'tip' | 'warning' | 'success' = 'info';
-  let statusText = '';
-  if (totalBudget > 0) {
-    const pct = Math.round((totalExp / totalBudget) * 100);
-    if (pct > 100) {
-      status = 'warning';
-      statusText = `\n\nVas un ${pct - 100}% por encima de tu presupuesto total.`;
-    } else {
-      status = pct > 80 ? 'tip' : 'success';
-      statusText = `\n\nHas usado el ${pct}% de tu presupuesto total.`;
-    }
-  }
-
-  return {
-    text: `Resumen de ${formatMonth(month)}:\n\n` +
-      `Ingresos: ${formatCurrency(totalInc)}\n` +
-      `Gastos: ${formatCurrency(totalExp)}\n` +
-      `Balance: ${formatCurrency(balance)}${statusText}`,
-    type: status,
-  };
-}
-
-function getSavingsTotal(data: UserData): { text: string; type: 'info' | 'tip' | 'warning' | 'success' } {
-  const balance = data.settings.currentBalance;
-  const emergency = data.settings.emergencyFund;
-  const available = Math.max(0, balance - emergency);
-
-  return {
-    text: `Saldo en cuenta: ${formatCurrency(balance)}\n` +
-      `Colchon de emergencia: ${formatCurrency(emergency)}\n` +
-      `Disponible para metas: ${formatCurrency(available)}`,
-    type: available > 0 ? 'success' : 'info',
-  };
-}
-
-function getBudgetAlerts(data: UserData): { text: string; type: 'info' | 'tip' | 'warning' | 'success' } {
-  const month = getCurrentMonth();
-  const monthExp = getMonthExpenses(data.expenses, month);
-
-  const byCategory = new Map<string, number>();
-  for (const e of monthExp) {
-    byCategory.set(e.category, (byCategory.get(e.category) || 0) + e.amount);
-  }
-
-  const overBudget: string[] = [];
-  for (const b of data.budgets) {
-    if (b.limit <= 0) continue;
-    const spent = byCategory.get(b.category) || 0;
-    if (spent > b.limit) {
-      const pct = Math.round((spent / b.limit) * 100);
-      overBudget.push(`${b.category}: ${formatCurrency(spent)} de ${formatCurrency(b.limit)} (${pct}%)`);
-    }
-  }
-
-  if (overBudget.length === 0) {
-    return { text: 'Ninguna categoria esta por encima del presupuesto este mes. Bien!', type: 'success' };
-  }
-
-  return {
-    text: `Categorias por encima del presupuesto:\n\n${overBudget.map((l) => '\u2022 ' + l).join('\n')}`,
-    type: 'warning',
-  };
-}
-
-// ── UI Colors ───────────────────────────────────────────────────
-
-const TYPE_COLORS: Record<string, string> = {
+const TYPE_BORDER: Record<string, string> = {
   info: 'border-l-accent-purple',
   tip: 'border-l-accent-blue',
   warning: 'border-l-accent-amber',
   success: 'border-l-accent-green',
 };
 
-// ── Component ───────────────────────────────────────────────────
-
 export function ChatWidget() {
-  const { expenses, incomes, budgets, settings, motorcycles } = useAppData();
+  const { expenses, incomes, budgets, settings, motorcycles, categories } = useAppData();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 0, role: 'bot', text: 'Hola! Soy tu asesor financiero. Preguntame sobre tus finanzas o elige una opcion:', type: 'info' },
+    { id: 0, role: 'bot', text: 'Hola, soy tu asesor financiero. Preguntame sobre tus finanzas o elige una opcion.', type: 'info' },
   ]);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  let nextId = useRef(1);
+  const nextId = useRef(1);
 
-  const userData: UserData = {
+  const finData: FinData = {
     expenses: expenses.map((e) => ({ date: e.date, amount: e.amount, category: e.category })),
     incomes: incomes.map((i) => ({ date: i.date, amount: i.amount })),
     budgets,
-    settings: {
-      currentBalance: settings.currentBalance,
-      emergencyFund: settings.emergencyFund,
-      monthlyIncome: settings.monthlyIncome,
-    },
+    categories,
+    settings: { currentBalance: settings.currentBalance, emergencyFund: settings.emergencyFund, monthlyIncome: settings.monthlyIncome },
     motorcycles: motorcycles.map((m) => ({ name: m.name, price: m.price, active: m.active })),
   };
 
@@ -315,7 +489,7 @@ export function ChatWidget() {
   const handleSend = (text: string) => {
     if (!text.trim()) return;
     const userMsg: ChatMessage = { id: nextId.current++, role: 'user', text: text.trim() };
-    const response = processMessage(text, userData);
+    const response = processMessage(text, finData);
     const botMsg: ChatMessage = { id: nextId.current++, role: 'bot', text: response.text, type: response.type };
     setMessages((prev) => [...prev, userMsg, botMsg]);
     setInput('');
@@ -323,7 +497,6 @@ export function ChatWidget() {
 
   return (
     <>
-      {/* Float button */}
       <motion.button
         onClick={() => setOpen(!open)}
         className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 w-12 h-12 rounded-full bg-accent-purple text-white shadow-lg flex items-center justify-center hover:bg-accent-purple/90 transition-colors"
@@ -344,7 +517,6 @@ export function ChatWidget() {
         </AnimatePresence>
       </motion.button>
 
-      {/* Chat window */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -357,8 +529,8 @@ export function ChatWidget() {
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-th-border flex items-center gap-2 flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-accent-purple/15 flex items-center justify-center">
-                <Bot size={16} className="text-accent-purple" />
+              <div className="w-7 h-7 rounded-full bg-accent-purple/15 flex items-center justify-center">
+                <Bot size={14} className="text-accent-purple" />
               </div>
               <div>
                 <p className="text-sm font-medium text-th-text">Asesor financiero</p>
@@ -367,56 +539,55 @@ export function ChatWidget() {
             </div>
 
             {/* Messages */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'bot' && (
-                    <div className="w-6 h-6 rounded-full bg-accent-purple/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Bot size={12} className="text-accent-purple" />
+                    <div className="w-5 h-5 rounded-full bg-accent-purple/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Bot size={10} className="text-accent-purple" />
                     </div>
                   )}
                   <div
-                    className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-line ${
+                    className={`max-w-[85%] rounded-xl px-3 py-2 text-[11px] leading-relaxed whitespace-pre-line ${
                       msg.role === 'user'
                         ? 'bg-accent-purple text-white rounded-br-sm'
-                        : `bg-th-hover text-th-text rounded-bl-sm border-l-2 ${TYPE_COLORS[msg.type || 'info']}`
+                        : `bg-th-hover text-th-text rounded-bl-sm border-l-2 ${TYPE_BORDER[msg.type || 'info']}`
                     }`}
                   >
                     {msg.text}
                   </div>
                   {msg.role === 'user' && (
-                    <div className="w-6 h-6 rounded-full bg-th-hover flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <User size={12} className="text-th-muted" />
+                    <div className="w-5 h-5 rounded-full bg-th-hover flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <User size={10} className="text-th-muted" />
                     </div>
                   )}
                 </div>
               ))}
 
-              {/* Suggestion chips — show after bot messages */}
               {messages.length <= 1 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {SUGGESTIONS.map((s) => (
                     <button
-                      key={s.label}
-                      onClick={() => handleSend(s.label)}
+                      key={s}
+                      onClick={() => handleSend(s)}
                       className="px-2.5 py-1.5 bg-th-hover border border-th-border rounded-full text-[11px] text-th-secondary hover:text-th-text hover:border-accent-purple/40 transition-colors"
                     >
-                      {s.icon} {s.label}
+                      {s}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Quick actions — always visible */}
-            <div className="px-3 py-2 border-t border-th-border/50 flex gap-1.5 flex-wrap flex-shrink-0">
-              {SUGGESTIONS.slice(0, 3).map((s) => (
+            {/* Quick chips */}
+            <div className="px-3 py-1.5 border-t border-th-border/40 flex gap-1.5 overflow-x-auto flex-shrink-0 scrollbar-none">
+              {SUGGESTIONS.slice(0, 4).map((s) => (
                 <button
-                  key={s.label}
-                  onClick={() => handleSend(s.label)}
-                  className="px-2 py-1 bg-th-hover rounded-md text-[10px] text-th-muted hover:text-th-text transition-colors truncate"
+                  key={s}
+                  onClick={() => handleSend(s)}
+                  className="px-2 py-1 bg-th-hover rounded-md text-[10px] text-th-muted hover:text-th-text transition-colors whitespace-nowrap flex-shrink-0"
                 >
-                  {s.icon} {s.label.split('?')[0]}?
+                  {s}
                 </button>
               ))}
             </div>
@@ -429,13 +600,13 @@ export function ChatWidget() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSend(input); }}
-                placeholder="Pregunta algo..."
-                className="flex-1 bg-th-input border border-th-border rounded-lg px-3 py-2 text-xs text-th-text placeholder:text-th-faint focus:border-accent-purple focus:outline-none transition-colors"
+                placeholder="Pregunta sobre tus finanzas..."
+                className="flex-1 bg-th-input border border-th-border rounded-lg px-3 py-1.5 text-xs text-th-text placeholder:text-th-faint focus:border-accent-purple focus:outline-none transition-colors"
               />
               <button
                 onClick={() => handleSend(input)}
                 disabled={!input.trim()}
-                className="p-2 rounded-lg bg-accent-purple text-white disabled:opacity-40 hover:bg-accent-purple/90 transition-colors"
+                className="p-1.5 rounded-lg bg-accent-purple text-white disabled:opacity-40 hover:bg-accent-purple/90 transition-colors"
               >
                 <Send size={14} />
               </button>
