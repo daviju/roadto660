@@ -5,6 +5,9 @@ import {
   Loader2, Building2,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { useAppData } from '../../lib/DataProvider';
+import { usePlan } from '../../hooks/usePlan';
+import { usePaywall } from './PaywallModal';
 import { useToast } from './Toast';
 import { BANK_LIST } from '../../lib/excel-parsers';
 import {
@@ -24,6 +27,9 @@ interface Props {
 
 export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
   const { user } = useAuth();
+  const { expenses } = useAppData();
+  const { maxExcelImports, maxMovementsPerImport } = usePlan();
+  const paywall = usePaywall();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +62,12 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
 
   // ─── Step 1: Bank selected → open file picker ───────────
   const handleBankSelect = (bankId: string) => {
+    // Check import limit for free users
+    const hasExistingImport = expenses.some((e) => e.createdAt && e.description?.includes('excel'));
+    if (maxExcelImports === 1 && hasExistingImport) {
+      paywall.open('Importaciones ilimitadas');
+      return;
+    }
     setSelectedBank(bankId);
     setError(null);
     setPickingFile(true);
@@ -104,6 +116,14 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
         dupes: result.duplicates.length,
         errors: result.errors.length,
       });
+
+      // Check movement-per-import limit for free users
+      if (result.newOnes.length > maxMovementsPerImport) {
+        paywall.open('Importar mas de 50 movimientos por archivo');
+        setStep('bank');
+        return;
+      }
+
       setSummary(result);
       setStep('summary');
 
@@ -225,7 +245,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
               )}
 
               <p className="text-[11px] text-th-faint text-center">
-                Solo soportamos BBVA por ahora. Mas bancos proximamente.
+                Soportamos BBVA, Unicaja y CaixaBank. Mas bancos proximamente.
               </p>
             </>
           )}

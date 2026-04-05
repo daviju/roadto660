@@ -18,7 +18,7 @@ CREATE TABLE profiles (
   ban_reason TEXT,
   monthly_income NUMERIC DEFAULT 0,
   pay_day INTEGER DEFAULT 28,
-  emergency_fund NUMERIC DEFAULT 2000,
+  emergency_fund NUMERIC DEFAULT 0,
   currency TEXT DEFAULT 'EUR',
   theme TEXT DEFAULT 'dark' CHECK (theme IN ('dark', 'light', 'system')),
   module_expenses BOOLEAN DEFAULT true,
@@ -249,4 +249,26 @@ CREATE POLICY "Users manage own achievements" ON achievements
 
 -- POINT_EVENTS
 CREATE POLICY "Users manage own points" ON point_events
+  FOR ALL USING (auth.uid() = user_id OR is_admin());
+
+-- ─── CHALLENGES ──────────────────────────────────────────────
+CREATE TABLE challenges (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  month TEXT NOT NULL, -- YYYY-MM
+  type TEXT NOT NULL CHECK (type IN ('no_spend_day', 'reduce_category', 'save_amount', 'log_daily', 'under_budget')),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  target_value NUMERIC DEFAULT 0,
+  current_value NUMERIC DEFAULT 0,
+  is_completed BOOLEAN DEFAULT false,
+  completed_at TIMESTAMPTZ,
+  points_reward INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_challenges_user_month ON challenges(user_id, month);
+ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users manage own challenges" ON challenges
   FOR ALL USING (auth.uid() = user_id OR is_admin());

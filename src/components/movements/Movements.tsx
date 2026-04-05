@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUpRight, ArrowDownRight, Search, Edit3, Trash2, Check, X, ChevronDown } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Search, Edit3, Trash2, Check, X, ChevronDown, Lock } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
+import { usePlan } from '../../hooks/usePlan';
+import { usePaywall } from '../shared/PaywallModal';
 import { useToast } from '../shared/Toast';
 import { formatCurrency, formatDate, getCurrentMonth } from '../../utils/format';
 import { getMonthExpenses, getMonthIncome } from '../../utils/calculations';
@@ -10,6 +12,8 @@ import type { Movement } from '../../types';
 
 export function Movements() {
   const { expenses, incomes, settings, updateExpense, deleteExpense, updateIncome, deleteIncome } = useAppData();
+  const { maxHistoryMonths } = usePlan();
+  const paywall = usePaywall();
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth(settings.payDay, settings.cycleMode));
   const [filterType, setFilterType] = useState<'all' | 'expense' | 'income'>('all');
   const [filterCategory, setFilterCategory] = useState('');
@@ -20,14 +24,16 @@ export function Movements() {
   const [editDesc, setEditDesc] = useState('');
   const { toast } = useToast();
 
-  // Build month options
+  // Build month options (limited to maxHistoryMonths for free users)
   const months = useMemo(() => {
     const set = new Set<string>();
     expenses.forEach((e) => set.add(e.date.substring(0, 7)));
     incomes.forEach((i) => set.add(i.date.substring(0, 7)));
     set.add(filterMonth);
-    return [...set].sort().reverse();
-  }, [expenses, incomes, filterMonth]);
+    const sorted = [...set].sort().reverse();
+    if (maxHistoryMonths === Infinity) return sorted;
+    return sorted.slice(0, maxHistoryMonths);
+  }, [expenses, incomes, filterMonth, maxHistoryMonths]);
 
   // Build unified movements list
   const movements = useMemo((): Movement[] => {
@@ -138,6 +144,11 @@ export function Movements() {
           className="bg-th-card border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors">
           {months.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
+        {maxHistoryMonths !== Infinity && (
+          <button onClick={() => paywall.open('Historial completo')} className="flex items-center gap-1 text-xs text-accent-purple hover:underline">
+            <Lock size={10} /> Ver mas meses
+          </button>
+        )}
         <select value={filterType} onChange={(e) => setFilterType(e.target.value as 'all' | 'expense' | 'income')} aria-label="Filtrar por tipo"
           className="bg-th-card border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors">
           <option value="all">Todos</option>

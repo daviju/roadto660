@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Filter } from 'lucide-react';
+import { Filter, Lock } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
+import { usePlan } from '../../hooks/usePlan';
+import { usePaywall } from '../shared/PaywallModal';
 import { formatCurrency, getCurrentMonth, formatMonth } from '../../utils/format';
 import { getAvailableBalance, getTotalObjective, getTotalPaid, getExpensesByCategory, getMonthTotalExpenses, getMonthTotalIncome, projectSavingsTimeline } from '../../utils/calculations';
 import { staggerContainer, fadeUp } from '../../utils/animations';
@@ -16,6 +18,8 @@ const tooltipStyle = {
 
 export function Charts() {
   const { settings, phases, expenses, incomes } = useAppData();
+  const { hasAdvancedCharts } = usePlan();
+  const paywall = usePaywall();
   const currentMonth = getCurrentMonth(settings.payDay, settings.cycleMode);
 
   // Month selector: specific month or "global"
@@ -113,24 +117,33 @@ export function Charts() {
         </div>
       </motion.div>
 
-      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow">
+      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow relative overflow-hidden">
         <h3 className="text-sm font-semibold text-th-text mb-4">Proyeccion de ahorro vs objetivo</h3>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={projectionData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-            <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval="preserveStartEnd" />
-            <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} width={40} />
-            <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-            <Legend wrapperStyle={{ fontSize: '11px' }} />
-            <Line type="monotone" dataKey="projected" name="Proyectado" stroke="#a78bfa" strokeWidth={2} dot={false} animationDuration={1500} />
-            <Line type="monotone" dataKey="required" name="Necesario" stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 5" dot={false} animationDuration={1500} />
-            <Line type="monotone" dataKey="objetivo" name="Objetivo" stroke="#f87171" strokeWidth={1} strokeDasharray="3 3" dot={false} animationDuration={1500} />
-          </LineChart>
-        </ResponsiveContainer>
-        <p className="text-xs text-th-muted mt-2">
-          A tu ritmo ({formatCurrency(estimatedMonthlySavings)}/mes),{' '}
-          {estimatedMonthlySavings >= requiredMonthly ? 'llegaras a tiempo.' : `necesitas ${formatCurrency(requiredMonthly)}/mes.`}
-        </p>
+        <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={projectionData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval="preserveStartEnd" />
+              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} width={40} />
+              <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <Line type="monotone" dataKey="projected" name="Proyectado" stroke="#a78bfa" strokeWidth={2} dot={false} animationDuration={1500} />
+              <Line type="monotone" dataKey="required" name="Necesario" stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 5" dot={false} animationDuration={1500} />
+              <Line type="monotone" dataKey="objetivo" name="Objetivo" stroke="#f87171" strokeWidth={1} strokeDasharray="3 3" dot={false} animationDuration={1500} />
+            </LineChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-th-muted mt-2">
+            A tu ritmo ({formatCurrency(estimatedMonthlySavings)}/mes),{' '}
+            {estimatedMonthlySavings >= requiredMonthly ? 'llegaras a tiempo.' : `necesitas ${formatCurrency(requiredMonthly)}/mes.`}
+          </p>
+        </div>
+        {!hasAdvancedCharts && (
+          <button onClick={() => paywall.open('Graficos avanzados')}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-th-card/60">
+            <Lock size={24} className="text-accent-purple" />
+            <span className="text-sm font-medium text-th-text">Desbloquear con PRO</span>
+          </button>
+        )}
       </motion.div>
 
       <motion.div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6" variants={staggerContainer}>
@@ -171,44 +184,62 @@ export function Charts() {
         </motion.div>
       </motion.div>
 
-      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow">
+      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow relative overflow-hidden">
         <h3 className="text-sm font-semibold text-th-text mb-4">Evolucion mensual</h3>
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={monthlyData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-            <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
-            <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={40} />
-            <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-            <Legend wrapperStyle={{ fontSize: '11px' }} />
-            <Bar dataKey="ingresos" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={1200} />
-            <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} animationDuration={1200} />
-          </BarChart>
-        </ResponsiveContainer>
+        <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
+              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={40} />
+              <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <Bar dataKey="ingresos" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={1200} />
+              <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} animationDuration={1200} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        {!hasAdvancedCharts && (
+          <button onClick={() => paywall.open('Graficos avanzados')}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-th-card/60">
+            <Lock size={24} className="text-accent-purple" />
+            <span className="text-sm font-medium text-th-text">Desbloquear con PRO</span>
+          </button>
+        )}
       </motion.div>
 
-      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow">
+      <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow relative overflow-hidden">
         <h3 className="text-sm font-semibold text-th-text mb-4">Ritmo actual vs necesario</h3>
-        <div className="grid grid-cols-2 gap-4">
-          {paceData.map((d, i) => (
-            <motion.div key={d.name} className="text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.15 }}>
-              <p className="text-xs text-th-muted mb-2">{d.name}</p>
-              <p className="font-mono text-2xl md:text-3xl font-bold" style={{ color: d.fill }}>{formatCurrency(d.value)}</p>
-              <p className="text-xs text-th-muted mt-1">/mes</p>
-            </motion.div>
-          ))}
-        </div>
-        <div className="mt-4 flex gap-2">
-          {paceData.map((d, i) => (
-            <div key={d.name} className="flex-1">
-              <div className="w-full h-3 bg-th-hover rounded-full overflow-hidden">
-                <motion.div className="h-full rounded-full progress-shimmer" style={{ backgroundColor: d.fill }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, (d.value / Math.max(...paceData.map((p) => p.value), 1)) * 100)}%` }}
-                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.5 + i * 0.15 }} />
+        <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
+          <div className="grid grid-cols-2 gap-4">
+            {paceData.map((d, i) => (
+              <motion.div key={d.name} className="text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.15 }}>
+                <p className="text-xs text-th-muted mb-2">{d.name}</p>
+                <p className="font-mono text-2xl md:text-3xl font-bold" style={{ color: d.fill }}>{formatCurrency(d.value)}</p>
+                <p className="text-xs text-th-muted mt-1">/mes</p>
+              </motion.div>
+            ))}
+          </div>
+          <div className="mt-4 flex gap-2">
+            {paceData.map((d, i) => (
+              <div key={d.name} className="flex-1">
+                <div className="w-full h-3 bg-th-hover rounded-full overflow-hidden">
+                  <motion.div className="h-full rounded-full progress-shimmer" style={{ backgroundColor: d.fill }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, (d.value / Math.max(...paceData.map((p) => p.value), 1)) * 100)}%` }}
+                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.5 + i * 0.15 }} />
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+        {!hasAdvancedCharts && (
+          <button onClick={() => paywall.open('Graficos avanzados')}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-th-card/60">
+            <Lock size={24} className="text-accent-purple" />
+            <span className="text-sm font-medium text-th-text">Desbloquear con PRO</span>
+          </button>
+        )}
       </motion.div>
     </motion.div>
   );

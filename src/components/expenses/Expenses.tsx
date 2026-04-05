@@ -1,13 +1,19 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit3, X, Check, Filter } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, Filter, Lock } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
+import { usePlan } from '../../hooks/usePlan';
+import { usePaywall } from '../shared/PaywallModal';
+import { useToast } from '../shared/Toast';
 import { formatCurrency, formatDate, todayISO, getCurrentMonth } from '../../utils/format';
 import { getMonthExpenses, getExpensesByCategory } from '../../utils/calculations';
 import { staggerContainer, fadeUp, listItem, collapseVariants } from '../../utils/animations';
 
 export function Expenses() {
-  const { expenses, addExpense, updateExpense, deleteExpense, settings } = useAppData();
+  const { expenses, addExpense, updateExpense, deleteExpense, settings, budgets } = useAppData();
+  const { maxHistoryMonths } = usePlan();
+  const paywall = usePaywall();
+  const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -26,7 +32,24 @@ export function Expenses() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || parseFloat(amount) <= 0) return;
-    addExpense({ date, amount: parseFloat(amount), category, description });
+    const expAmount = parseFloat(amount);
+    addExpense({ date, amount: expAmount, category, description });
+
+    // Check budget alert for this category
+    const budget = budgets.find((b) => b.category === category);
+    if (budget && budget.limit > 0) {
+      const currentMonth = getCurrentMonth(settings.payDay, settings.cycleMode);
+      const catSpent = expenses
+        .filter((ex) => ex.category === category && ex.date.startsWith(currentMonth))
+        .reduce((s, ex) => s + ex.amount, 0) + expAmount;
+      const pct = catSpent / budget.limit;
+      if (pct >= 1) {
+        toast.error(`Has superado el presupuesto de ${category}: ${formatCurrency(catSpent)} / ${formatCurrency(budget.limit)}`);
+      } else if (pct >= 0.8) {
+        toast.warning(`Llevas el ${Math.round(pct * 100)}% del presupuesto de ${category}: ${formatCurrency(catSpent)} / ${formatCurrency(budget.limit)}`);
+      }
+    }
+
     setAmount(''); setDescription(''); setShowForm(false);
   };
 
@@ -51,8 +74,12 @@ export function Expenses() {
   const totalMonth = monthExpenses.reduce((s, e) => s + e.amount, 0);
   const byCategory = getExpensesByCategory(expenses, filterMonth, settings.payDay, settings.cycleMode);
 
-  const months = [...new Set(expenses.map((e) => e.date.substring(0, 7)))].sort().reverse();
-  if (!months.includes(filterMonth)) months.unshift(filterMonth);
+  const months = useMemo(() => {
+    const sorted = [...new Set(expenses.map((e) => e.date.substring(0, 7)))].sort().reverse();
+    if (!sorted.includes(filterMonth)) sorted.unshift(filterMonth);
+    if (maxHistoryMonths === Infinity) return sorted;
+    return sorted.slice(0, maxHistoryMonths);
+  }, [expenses, filterMonth, maxHistoryMonths]);
 
   return (
     <motion.div className="space-y-6" variants={staggerContainer} initial="initial" animate="animate">
@@ -127,6 +154,11 @@ export function Expenses() {
           className="bg-th-card border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors">
           {months.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
+        {maxHistoryMonths !== Infinity && (
+          <button onClick={() => paywall.open('Historial completo')} className="flex items-center gap-1 text-xs text-accent-purple hover:underline">
+            <Lock size={10} /> Ver mas meses
+          </button>
+        )}
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="Filtrar por categoria"
           className="bg-th-card border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none transition-colors">
           <option value="all">Todas las categorias</option>

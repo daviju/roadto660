@@ -36,9 +36,9 @@ export const DEFAULT_INCOME_CONCEPTS = ['Nomina', 'Cashback', 'Devolucion', 'Otr
 // ─── Default Settings ────────────────────────────────────────────
 export const DEFAULT_SETTINGS: AppSettings = {
   currentBalance: 0,
-  emergencyFund: 2000,
-  monthlyIncome: 1382,
-  cashbackNet: 35.10,
+  emergencyFund: 0,
+  monthlyIncome: 0,
+  cashbackNet: 0,
   targetDate: '2027-01-31',
   categories: DEFAULT_CATEGORIES,
   incomeConcepts: DEFAULT_INCOME_CONCEPTS,

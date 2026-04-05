@@ -272,3 +272,18 @@ export interface Movement {
   source?: 'manual' | 'excel_import';
   originalConcept?: string;
 }
+
+export interface Challenge {
+  id: string;
+  user_id: string;
+  month: string; // YYYY-MM
+  type: 'no_spend_day' | 'reduce_category' | 'save_amount' | 'log_daily' | 'under_budget';
+  title: string;
+  description: string;
+  target_value: number;
+  current_value: number;
+  is_completed: boolean;
+  completed_at: string | null;
+  points_reward: number;
+  created_at: string;
+}

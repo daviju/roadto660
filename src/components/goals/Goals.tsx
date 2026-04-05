@@ -443,7 +443,14 @@ export function Goals() {
             </span>
           )}
           <motion.button
-            onClick={() => { resetGoalForm(); setShowGoalForm(true); }}
+            onClick={() => {
+              if (!isPro && goals.length >= 1) {
+                paywall.open('Metas ilimitadas');
+                return;
+              }
+              resetGoalForm();
+              setShowGoalForm(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-purple text-white rounded-lg text-sm font-medium hover:bg-accent-purple/80 transition-colors"
             whileTap={{ scale: 0.95 }}
           >

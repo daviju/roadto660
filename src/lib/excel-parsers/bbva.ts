@@ -16,10 +16,13 @@ function categorize(concepto: string, movimiento: string, amount: number, type: 
   // ═══ GASTOS ═══
 
   // Supermercados
-  if (/mercadona|eroski|lidl|bk20603|carrefour|dia |aldi|alcampo/.test(text)) return 'supermercado';
+  if (/mercadona|eroski|lidl|bk20603|carrefour|dia |aldi|alcampo|minimarket las cruces/.test(text)) return 'supermercado';
 
   // Restaurantes / Comer fuera
-  if (/palacio del pollo|p&p.*jaen|p&p.*rest|taco bell|comidas caseras|plk|popeyes|vips|sushi|bodega del monje|oasis|ehsan|kebab|isturk|telekebab|bombon boss|cafeteria|cafe billar|shooter|museo/.test(text)) return 'comer-fuera';
+  if (/palacio del pollo|p&p.*jaen|p&p.*rest|taco bell|comidas caseras|plk|popeyes|vips|sushi|bodega del monje|oasis|ehsan|kebab|isturk|telekebab|bombon boss|cafeteria|cafe billar|shooter|museo|kebab las pilas|kebab casa blanca|charipeo|croissanteria de agus|la favorita/.test(text)) return 'comer-fuera';
+
+  // Chuches / Tienda barrio (before general vending)
+  if (/chucherias alimentacion/.test(text)) return 'chuches-tienda';
 
   // Transferencias — classify by movimiento content
   if (/transferencia realizada/.test(text)) {
@@ -76,14 +79,14 @@ function categorize(concepto: string, movimiento: string, amount: number, type: 
 
 // ─── BBVA Parser ──────────────────────────────────────────────
 
-/** Scan first rows for "ltimos movimientos" (accent-safe) in any cell */
+/** Scan first rows for "movimientos" in any cell (covers both "Últimos movimientos" and "Movimientos") */
 function findTitleRow(rows: unknown[][]): number {
   const limit = Math.min(rows.length, 8);
   for (let i = 0; i < limit; i++) {
     const row = rows[i];
     if (!row) continue;
     for (const cell of row as unknown[]) {
-      if (cell && String(cell).includes('ltimos movimientos')) return i;
+      if (cell && String(cell).toLowerCase().includes('movimientos')) return i;
     }
   }
   return -1;

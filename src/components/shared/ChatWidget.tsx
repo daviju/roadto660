@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Bot, Send, User } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
+import { usePlan } from '../../hooks/usePlan';
 import { formatCurrency } from '../../utils/format';
 import type { Category } from '../../types';
 
@@ -460,6 +461,7 @@ const TYPE_BORDER: Record<string, string> = {
 
 export function ChatWidget() {
   const { expenses, incomes, budgets, settings, motorcycles, categories } = useAppData();
+  const { maxChatMessagesPerDay } = usePlan();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 0, role: 'bot', text: 'Hola, soy tu asesor financiero. Preguntame sobre tus finanzas o elige una opcion.', type: 'info' },
@@ -488,6 +490,18 @@ export function ChatWidget() {
 
   const handleSend = (text: string) => {
     if (!text.trim()) return;
+    // Enforce daily message limit for free users
+    const todayUserMessages = messages.filter((m) => m.role === 'user').length;
+    if (todayUserMessages >= maxChatMessagesPerDay) {
+      const limitMsg: ChatMessage = {
+        id: nextId.current++, role: 'bot',
+        text: 'Has alcanzado el limite de 10 mensajes diarios. Actualiza a PRO para mensajes ilimitados.',
+        type: 'warning',
+      };
+      setMessages((prev) => [...prev, limitMsg]);
+      setInput('');
+      return;
+    }
     const userMsg: ChatMessage = { id: nextId.current++, role: 'user', text: text.trim() };
     const response = processMessage(text, finData);
     const botMsg: ChatMessage = { id: nextId.current++, role: 'bot', text: response.text, type: response.type };

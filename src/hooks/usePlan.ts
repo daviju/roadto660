@@ -16,8 +16,11 @@ export function usePlan() {
     maxHistoryMonths: isPro ? Infinity : 3,
     hasSimulatorScenarios: isPro,
     hasAdvancedTips: isPro,
+    maxChatMessagesPerDay: isPro ? Infinity : 10,
     hasAdvancedCharts: isPro,
     hasExport: isPro,
     hasGamification: isPro,
+    hasChallenges: isPro,
+    hasEmailReports: isPro,
   };
 }

@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit3, X, Check } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, Lock } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
+import { usePlan } from '../../hooks/usePlan';
+import { usePaywall } from '../shared/PaywallModal';
 import { formatCurrency, formatDate, todayISO, getCurrentMonth } from '../../utils/format';
 import { getMonthIncome, getMonthTotalIncome } from '../../utils/calculations';
 import { staggerContainer, fadeUp, listItem, collapseVariants } from '../../utils/animations';
 
 export function Income() {
   const { incomes, addIncome, updateIncome, deleteIncome, settings } = useAppData();
+  const { maxHistoryMonths } = usePlan();
+  const paywall = usePaywall();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth(settings.payDay, settings.cycleMode));
@@ -44,8 +48,12 @@ export function Income() {
 
   const monthIncomes = getMonthIncome(incomes, filterMonth, settings.payDay, settings.cycleMode);
   const totalMonth = getMonthTotalIncome(incomes, filterMonth, settings.payDay, settings.cycleMode);
-  const months = [...new Set(incomes.map((i) => i.date.substring(0, 7)))].sort().reverse();
-  if (!months.includes(filterMonth)) months.unshift(filterMonth);
+  const months = useMemo(() => {
+    const sorted = [...new Set(incomes.map((i) => i.date.substring(0, 7)))].sort().reverse();
+    if (!sorted.includes(filterMonth)) sorted.unshift(filterMonth);
+    if (maxHistoryMonths === Infinity) return sorted;
+    return sorted.slice(0, maxHistoryMonths);
+  }, [incomes, filterMonth, maxHistoryMonths]);
 
   return (
     <motion.div className="space-y-6" variants={staggerContainer} initial="initial" animate="animate">
@@ -119,6 +127,11 @@ export function Income() {
           className="bg-th-card border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-green focus:outline-none transition-colors">
           {months.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
+        {maxHistoryMonths !== Infinity && (
+          <button onClick={() => paywall.open('Historial completo')} className="flex items-center gap-1 text-xs text-accent-purple hover:underline">
+            <Lock size={10} /> Ver mas meses
+          </button>
+        )}
       </motion.div>
 
       <div className="space-y-2">
