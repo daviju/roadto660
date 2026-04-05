@@ -194,6 +194,8 @@ export interface Expense {
   category: string;
   description: string;
   createdAt?: string;
+  originalConcept?: string;
+  source?: 'manual' | 'excel_import';
 }
 
 export interface Income {
@@ -203,6 +205,8 @@ export interface Income {
   concept: string;
   description: string;
   createdAt?: string;
+  originalConcept?: string;
+  source?: 'manual' | 'excel_import';
 }
 
 export interface Budget {
@@ -285,5 +289,6 @@ export interface Challenge {
   is_completed: boolean;
   completed_at: string | null;
   points_reward: number;
+  category_slug: string | null;
   created_at: string;
 }

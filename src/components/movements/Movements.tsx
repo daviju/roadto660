@@ -48,6 +48,9 @@ export function Movements() {
         category: e.category,
         amount: e.amount,
         type: 'expense' as const,
+        createdAt: e.createdAt,
+        source: e.source,
+        originalConcept: e.originalConcept,
       })),
       ...monthIncomes.map((i) => ({
         id: i.id,
@@ -56,6 +59,9 @@ export function Movements() {
         category: i.concept,
         amount: i.amount,
         type: 'income' as const,
+        createdAt: i.createdAt,
+        source: i.source,
+        originalConcept: i.originalConcept,
       })),
     ];
 

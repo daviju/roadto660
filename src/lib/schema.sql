@@ -264,6 +264,7 @@ CREATE TABLE challenges (
   is_completed BOOLEAN DEFAULT false,
   completed_at TIMESTAMPTZ,
   points_reward INTEGER DEFAULT 0,
+  category_slug TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

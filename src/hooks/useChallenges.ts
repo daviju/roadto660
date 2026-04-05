@@ -81,44 +81,57 @@ export function useChallenges() {
     const load = async () => {
       setLoading(true);
 
-      // Try to fetch existing challenges for this month
-      const { data: existing } = await supabase
-        .from('challenges')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('month', month)
-        .order('created_at');
+      try {
+        // Try to fetch existing challenges for this month
+        const { data: existing, error: fetchErr } = await supabase
+          .from('challenges')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('month', month)
+          .order('created_at');
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (existing && existing.length > 0) {
-        setChallenges(existing as Challenge[]);
-        setLoading(false);
-        return;
+        if (fetchErr) {
+          console.error('[useChallenges] fetch error:', fetchErr.message);
+          setLoading(false);
+          return;
+        }
+
+        if (existing && existing.length > 0) {
+          setChallenges(existing as Challenge[]);
+          setLoading(false);
+          return;
+        }
+
+        // Auto-generate 3 challenges for this month
+        const templates = pickChallenges(3);
+        const rows = templates.map((t) => ({
+          user_id: user.id,
+          month,
+          type: t.type,
+          title: t.title,
+          description: t.description,
+          target_value: t.target_value,
+          current_value: 0,
+          is_completed: false,
+          points_reward: t.points_reward,
+        }));
+
+        const { data: created, error: insertErr } = await supabase
+          .from('challenges')
+          .insert(rows)
+          .select();
+
+        if (cancelled) return;
+
+        if (insertErr) {
+          console.error('[useChallenges] insert error:', insertErr.message);
+        }
+        if (created) setChallenges(created as Challenge[]);
+      } catch (err) {
+        console.error('[useChallenges] unexpected error:', err);
       }
-
-      // Auto-generate 3 challenges for this month
-      const templates = pickChallenges(3);
-      const rows = templates.map((t) => ({
-        user_id: user.id,
-        month,
-        type: t.type,
-        title: t.title,
-        description: t.description,
-        target_value: t.target_value,
-        current_value: 0,
-        is_completed: false,
-        points_reward: t.points_reward,
-      }));
-
-      const { data: created } = await supabase
-        .from('challenges')
-        .insert(rows)
-        .select();
-
-      if (cancelled) return;
-
-      if (created) setChallenges(created as Challenge[]);
       setLoading(false);
     };
 

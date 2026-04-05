@@ -100,9 +100,9 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
   updateBudget: (cat: string, limit: number) => void; deleteBudget: (cat: string) => void; settings: any;
 }) {
   const spent = getCategoryExpenses(expenses, currentMonth, budget.category, settings.payDay, settings.cycleMode);
-  const pct = budget.limit > 0 ? spent / budget.limit : spent > 0 ? 1 : 0;
-  const isOver = pct >= 1;
-  const isWarning = pct >= 0.8 && !isOver;
+  const pct = budget.limit > 0 ? spent / budget.limit : 0;
+  const isOver = budget.limit > 0 && pct >= 1;
+  const isWarning = budget.limit > 0 && pct >= 0.8 && !isOver;
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-30px' });
 

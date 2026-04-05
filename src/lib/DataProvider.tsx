@@ -138,6 +138,14 @@ function categoryIdByName(cats: Category[]): Map<string, string> {
   return m;
 }
 
+/** If concept is a generic transfer phrase, prefer original_concept for display */
+function displayConcept(concept: string | null, originalConcept: string | null): string {
+  if (concept && /^transferencia (realizada|recibida)$/i.test(concept.trim()) && originalConcept) {
+    return originalConcept;
+  }
+  return concept || originalConcept || '';
+}
+
 function toExpenses(txs: Transaction[], catMap: Map<string, string>): Expense[] {
   return txs
     .filter((t) => t.type === 'expense')
@@ -146,8 +154,10 @@ function toExpenses(txs: Transaction[], catMap: Map<string, string>): Expense[] 
       date: t.transaction_date,
       amount: Number(t.amount),
       category: (t.category_id && catMap.get(t.category_id)) || 'Otros',
-      description: t.concept || t.original_concept || '',
+      description: displayConcept(t.concept, t.original_concept),
       createdAt: t.created_at,
+      originalConcept: t.original_concept || undefined,
+      source: t.source || undefined,
     }));
 }
 
@@ -159,8 +169,10 @@ function toIncomes(txs: Transaction[], catMap: Map<string, string>): Income[] {
       date: t.transaction_date,
       amount: Number(t.amount),
       concept: (t.category_id && catMap.get(t.category_id)) || t.concept || 'Otros',
-      description: t.concept || t.original_concept || '',
+      description: displayConcept(t.concept, t.original_concept),
       createdAt: t.created_at,
+      originalConcept: t.original_concept || undefined,
+      source: t.source || undefined,
     }));
 }
 
@@ -391,9 +403,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (updates.cycleMode !== undefined) extraUpdates.cycleMode = updates.cycleMode;
 
       if (Object.keys(extraUpdates).length > 0) {
+        console.log('[DataProvider] saving extra settings:', extraUpdates);
         setExtra((prev) => {
           const next = { ...prev, ...extraUpdates };
           saveExtraSettings(next);
+          console.log('[DataProvider] extra saved to localStorage:', next);
           return next;
         });
       }
@@ -471,6 +485,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (error) console.error('[DataProvider] addExpense error:', error.message);
       if (data) {
         setTransactions((prev) => [data as Transaction, ...prev]);
+        // Auto-update balance
+        setExtra((prev) => {
+          const next = { ...prev, currentBalance: prev.currentBalance - expense.amount };
+          saveExtraSettings(next);
+          return next;
+        });
       }
     },
     [user, findOrCreateCategory],
@@ -502,6 +522,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (error) console.error('[DataProvider] addExpenses error:', error.message);
       if (data) {
         setTransactions((prev) => [...(data as Transaction[]), ...prev]);
+        // Auto-update balance for bulk expenses
+        const totalAmount = items.reduce((s, e) => s + e.amount, 0);
+        setExtra((prev) => {
+          const next = { ...prev, currentBalance: prev.currentBalance - totalAmount };
+          saveExtraSettings(next);
+          return next;
+        });
       }
     },
     [user, findOrCreateCategory],
@@ -566,6 +593,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         .single();
       if (data) {
         setTransactions((prev) => [data as Transaction, ...prev]);
+        // Auto-update balance
+        setExtra((prev) => {
+          const next = { ...prev, currentBalance: prev.currentBalance + income.amount };
+          saveExtraSettings(next);
+          return next;
+        });
       }
     },
     [user, findOrCreateCategory],
@@ -595,6 +628,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const { data } = await supabase.from('transactions').insert(rows).select();
       if (data) {
         setTransactions((prev) => [...(data as Transaction[]), ...prev]);
+        // Auto-update balance for bulk incomes
+        const totalAmount = items.reduce((s, i) => s + i.amount, 0);
+        setExtra((prev) => {
+          const next = { ...prev, currentBalance: prev.currentBalance + totalAmount };
+          saveExtraSettings(next);
+          return next;
+        });
       }
     },
     [user, findOrCreateCategory],

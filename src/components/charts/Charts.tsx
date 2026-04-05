@@ -1,13 +1,23 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Filter, Lock } from 'lucide-react';
+import { Filter, Lock, BarChart3 } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { usePlan } from '../../hooks/usePlan';
 import { usePaywall } from '../shared/PaywallModal';
 import { formatCurrency, getCurrentMonth, formatMonth } from '../../utils/format';
 import { getAvailableBalance, getTotalObjective, getTotalPaid, getExpensesByCategory, getMonthTotalExpenses, getMonthTotalIncome, projectSavingsTimeline } from '../../utils/calculations';
 import { staggerContainer, fadeUp } from '../../utils/animations';
+
+function EmptyChart({ message, sub }: { message: string; sub?: string }) {
+  return (
+    <div className="h-[250px] flex flex-col items-center justify-center gap-2 text-center">
+      <BarChart3 size={32} className="text-th-faint" />
+      <p className="text-sm text-th-muted">{message}</p>
+      {sub && <p className="text-xs text-th-faint">{sub}</p>}
+    </div>
+  );
+}
 
 const COLORS = ['#a78bfa', '#34d399', '#fb923c', '#f87171', '#fbbf24', '#22d3ee', '#818cf8', '#f472b6', '#a3e635', '#94a3b8'];
 
@@ -119,25 +129,29 @@ export function Charts() {
 
       <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow relative overflow-hidden">
         <h3 className="text-sm font-semibold text-th-text mb-4">Proyeccion de ahorro vs objetivo</h3>
-        <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={projectionData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} width={40} />
-              <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-              <Legend wrapperStyle={{ fontSize: '11px' }} />
-              <Line type="monotone" dataKey="projected" name="Proyectado" stroke="#a78bfa" strokeWidth={2} dot={false} animationDuration={1500} />
-              <Line type="monotone" dataKey="required" name="Necesario" stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 5" dot={false} animationDuration={1500} />
-              <Line type="monotone" dataKey="objetivo" name="Objetivo" stroke="#f87171" strokeWidth={1} strokeDasharray="3 3" dot={false} animationDuration={1500} />
-            </LineChart>
-          </ResponsiveContainer>
-          <p className="text-xs text-th-muted mt-2">
-            A tu ritmo ({formatCurrency(estimatedMonthlySavings)}/mes),{' '}
-            {estimatedMonthlySavings >= requiredMonthly ? 'llegaras a tiempo.' : `necesitas ${formatCurrency(requiredMonthly)}/mes.`}
-          </p>
-        </div>
-        {!hasAdvancedCharts && (
+        {totalObjective <= 0 || projectionData.length === 0 ? (
+          <EmptyChart message="Sin datos de proyeccion" sub="Crea fases con items en el Timeline para ver la proyeccion" />
+        ) : (
+          <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={projectionData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} width={40} />
+                <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Line type="monotone" dataKey="projected" name="Proyectado" stroke="#a78bfa" strokeWidth={2} dot={false} animationDuration={1500} />
+                <Line type="monotone" dataKey="required" name="Necesario" stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 5" dot={false} animationDuration={1500} />
+                <Line type="monotone" dataKey="objetivo" name="Objetivo" stroke="#f87171" strokeWidth={1} strokeDasharray="3 3" dot={false} animationDuration={1500} />
+              </LineChart>
+            </ResponsiveContainer>
+            <p className="text-xs text-th-muted mt-2">
+              A tu ritmo ({formatCurrency(estimatedMonthlySavings)}/mes),{' '}
+              {estimatedMonthlySavings >= requiredMonthly ? 'llegaras a tiempo.' : `necesitas ${formatCurrency(requiredMonthly)}/mes.`}
+            </p>
+          </div>
+        )}
+        {totalObjective > 0 && projectionData.length > 0 && !hasAdvancedCharts && (
           <button onClick={() => paywall.open('Graficos avanzados')}
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-th-card/60">
             <Lock size={24} className="text-accent-purple" />
@@ -163,7 +177,7 @@ export function Charts() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : <div className="h-[250px] flex items-center justify-center text-th-muted text-sm">Sin datos</div>}
+          ) : <EmptyChart message="Sin gastos en este periodo" sub="Anade gastos para ver el desglose" />}
         </motion.div>
 
         <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow">
@@ -180,26 +194,30 @@ export function Charts() {
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
               </PieChart>
             </ResponsiveContainer>
-          ) : <div className="h-[250px] flex items-center justify-center text-th-muted text-sm">Sin datos</div>}
+          ) : <EmptyChart message="Sin gastos en este periodo" sub="Anade gastos para ver la distribucion" />}
         </motion.div>
       </motion.div>
 
       <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow relative overflow-hidden">
         <h3 className="text-sm font-semibold text-th-text mb-4">Evolucion mensual</h3>
-        <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
-              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={40} />
-              <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-              <Legend wrapperStyle={{ fontSize: '11px' }} />
-              <Bar dataKey="ingresos" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={1200} />
-              <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} animationDuration={1200} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        {!hasAdvancedCharts && (
+        {monthlyData.length === 0 ? (
+          <EmptyChart message="Sin datos de evolucion" sub="Registra gastos o ingresos para ver la evolucion mensual" />
+        ) : (
+          <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
+                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={40} />
+                <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Bar dataKey="ingresos" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={1200} />
+                <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} animationDuration={1200} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        {monthlyData.length > 0 && !hasAdvancedCharts && (
           <button onClick={() => paywall.open('Graficos avanzados')}
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-th-card/60">
             <Lock size={24} className="text-accent-purple" />
