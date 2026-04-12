@@ -43,7 +43,7 @@ export function Expenses() {
         .filter((ex) => ex.category === category && ex.date.startsWith(currentMonth))
         .reduce((s, ex) => s + ex.amount, 0) + expAmount;
       const pct = catSpent / budget.limit;
-      if (pct >= 1) {
+      if (pct > 1) {
         toast.error(`Has superado el presupuesto de ${category}: ${formatCurrency(catSpent)} / ${formatCurrency(budget.limit)}`);
       } else if (pct >= 0.8) {
         toast.warning(`Llevas el ${Math.round(pct * 100)}% del presupuesto de ${category}: ${formatCurrency(catSpent)} / ${formatCurrency(budget.limit)}`);

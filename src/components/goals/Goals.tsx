@@ -278,10 +278,13 @@ export function Goals() {
 
   // Calculate goal progress
   const getGoalProgress = (goal: Goal) => {
-    const paidItems = (goal.items || []).filter((i) => i.is_paid);
+    const items = goal.items || [];
+    const paidItems = items.filter((i) => i.is_paid);
     const totalPaid = paidItems.reduce((s, i) => s + i.cost, 0);
-    const progressPct = goal.target_amount > 0 ? Math.min(1, totalPaid / goal.target_amount) : 0;
-    return { totalPaid, progressPct };
+    // Use target_amount if set, otherwise fall back to sum of all item costs
+    const totalTarget = goal.target_amount > 0 ? goal.target_amount : items.reduce((s, i) => s + i.cost, 0);
+    const progressPct = totalTarget > 0 ? Math.min(1, totalPaid / totalTarget) : (items.length > 0 && paidItems.length === items.length ? 1 : 0);
+    return { totalPaid, progressPct, totalTarget };
   };
 
   // Estimated months to reach goal
@@ -550,8 +553,8 @@ export function Goals() {
 
       {/* Active Goal - Hero section */}
       {activeGoal && (() => {
-        const { totalPaid, progressPct } = getGoalProgress(activeGoal);
-        const remaining = Math.max(0, activeGoal.target_amount - totalPaid);
+        const { totalPaid, progressPct, totalTarget } = getGoalProgress(activeGoal);
+        const remaining = Math.max(0, totalTarget - totalPaid);
         const estimatedMonths = getEstimatedMonths(remaining, monthlySavings);
         const estimatedDate = getEstimatedDate(estimatedMonths);
 
@@ -615,7 +618,7 @@ export function Goals() {
               </div>
               <div className="flex justify-between text-xs text-th-muted">
                 <span className="font-mono">{formatCurrency(totalPaid)} acumulado</span>
-                <span className="font-mono">{formatCurrency(activeGoal.target_amount)} objetivo</span>
+                <span className="font-mono">{formatCurrency(totalTarget)} objetivo</span>
               </div>
             </div>
 
@@ -757,6 +760,11 @@ export function Goals() {
                 Necesitas registrar gastos para generar escenarios de ahorro.
               </p>
             </div>
+          ) : monthlySavings <= 0 ? (
+            <div className="bg-th-card rounded-xl p-6 border border-accent-amber/20 text-center">
+              <p className="text-sm text-accent-amber font-medium">No hay ahorro mensual suficiente</p>
+              <p className="text-xs text-th-muted mt-1">Tus gastos superan tus ingresos. Recorta para poder calcular plazos.</p>
+            </div>
           ) : (
             <motion.div
               className="grid grid-cols-1 md:grid-cols-2 gap-3"
@@ -806,7 +814,7 @@ export function Goals() {
                         <p className="text-[10px] text-th-muted uppercase tracking-wider">Nuevo plazo</p>
                         <p className="font-mono text-sm font-semibold text-accent-cyan mt-0.5">
                           {isFinite(scenario.newEstimatedMonths)
-                            ? `${scenario.newEstimatedMonths} meses`
+                            ? `${scenario.newEstimatedMonths} ${scenario.newEstimatedMonths === 1 ? 'mes' : 'meses'}`
                             : '--'}
                         </p>
                       </div>

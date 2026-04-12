@@ -5,6 +5,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 import { useAppData } from '../../lib/DataProvider';
 import { usePlan } from '../../hooks/usePlan';
 import { usePaywall } from './PaywallModal';
@@ -29,7 +30,7 @@ interface Props {
 
 export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
   const { user } = useAuth();
-  const { expenses } = useAppData();
+  const { expenses, settings, updateSettings } = useAppData();
   const { maxExcelImports, maxMovementsPerImport } = usePlan();
   const paywall = usePaywall();
   const { toast } = useToast();
@@ -201,6 +202,27 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
         toast.warning(`Se importaron ${inserted} de ${inserted + failed}. ${failed} fallaron.`);
       } else {
         toast.error('Error al importar: no se pudieron guardar los registros.');
+      }
+
+      // Update balance with imported transactions
+      if (inserted > 0) {
+        const totalExpenses = summary.newOnes
+          .filter((t) => t.type === 'expense')
+          .reduce((s, t) => s + t.amount, 0);
+        const totalIncome = summary.newOnes
+          .filter((t) => t.type === 'income')
+          .reduce((s, t) => s + t.amount, 0);
+        const balanceDelta = totalIncome - totalExpenses;
+        await updateSettings({ currentBalance: settings.currentBalance + balanceDelta });
+
+        // Award points for Excel import (fire-and-forget)
+        try {
+          await supabase.from('point_events').insert({ user_id: user.id, points: 50, reason: 'Importar Excel' });
+          const { data: profileData } = await supabase.from('profiles').select('points').eq('id', user.id).single();
+          if (profileData) {
+            await supabase.from('profiles').update({ points: (profileData.points || 0) + 50 }).eq('id', user.id);
+          }
+        } catch { /* non-critical */ }
       }
 
       onComplete?.();

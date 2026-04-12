@@ -53,10 +53,11 @@ const FEATURES = [
 const FREE_FEATURES = [
   '1 meta de ahorro',
   'Gastos e ingresos',
-  'Presupuestos',
+  'Presupuestos por categoria',
   '3 meses de historial',
   '1 importacion Excel (50 mov.)',
   'Chatbot basico (10 msg/dia)',
+  'Gana puntos por cada accion',
 ];
 
 const PRO_FEATURES = [
@@ -65,9 +66,9 @@ const PRO_FEATURES = [
   'Importaciones ilimitadas',
   'Graficos avanzados',
   'Escenarios de simulacion',
-  'Retos mensuales + puntos',
+  'Retos mensuales',
+  'Chatbot ilimitado',
   'Exportacion de datos',
-  'Soporte prioritario',
 ];
 
 interface Props {
@@ -104,8 +105,8 @@ export function LandingPage({ onLogin }: Props) {
             </span>
           </h1>
           <p className="text-lg md:text-xl text-th-secondary max-w-2xl mx-auto mb-8">
-            Planifica tus metas de ahorro, controla tus gastos e importa tus extractos bancarios.
-            Todo en una app rapida, bonita y privada.
+            Controla tus gastos, planifica metas de ahorro e importa extractos de cualquier banco.
+            Presupuestos, graficos y simulaciones en una app rapida y privada.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <motion.button

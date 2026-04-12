@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
-import { Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Check } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { formatCurrency, getCurrentMonth } from '../../utils/format';
 import { getCategoryExpenses } from '../../utils/calculations';
@@ -85,10 +85,16 @@ export function Budget() {
 
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
-          {budgets.map((budget, index) => (
-            <BudgetItem key={budget.category} budget={budget} index={index} expenses={expenses}
-              currentMonth={currentMonth} updateBudget={updateBudget} deleteBudget={deleteBudget} settings={settings} />
-          ))}
+          {[...budgets]
+            .sort((a, b) => {
+              const spentA = getCategoryExpenses(expenses, currentMonth, a.category, settings.payDay, settings.cycleMode);
+              const spentB = getCategoryExpenses(expenses, currentMonth, b.category, settings.payDay, settings.cycleMode);
+              return spentB - spentA;
+            })
+            .map((budget, index) => (
+              <BudgetItem key={budget.category} budget={budget} index={index} expenses={expenses}
+                currentMonth={currentMonth} updateBudget={updateBudget} deleteBudget={deleteBudget} settings={settings} />
+            ))}
         </AnimatePresence>
       </div>
     </motion.div>
@@ -101,15 +107,16 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
 }) {
   const spent = getCategoryExpenses(expenses, currentMonth, budget.category, settings.payDay, settings.cycleMode);
   const pct = budget.limit > 0 ? spent / budget.limit : 0;
-  const isOver = budget.limit > 0 && pct >= 1;
-  const isWarning = budget.limit > 0 && pct >= 0.8 && !isOver;
+  const isOver = budget.limit > 0 && pct > 1;
+  const isExact = budget.limit > 0 && Math.abs(spent - budget.limit) < 0.01;
+  const isWarning = budget.limit > 0 && pct >= 0.8 && !isOver && !isExact;
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-30px' });
 
   return (
     <motion.div ref={ref}
       className={`bg-th-card rounded-xl p-4 md:p-5 border transition-colors ${
-        isOver ? 'border-accent-red/30 card-glow-red' : isWarning ? 'border-accent-amber/30 card-glow-amber' : 'border-th-border card-glow'
+        isOver ? 'border-accent-red/30 card-glow-red' : isExact ? 'border-accent-green/30 card-glow' : isWarning ? 'border-accent-amber/30 card-glow-amber' : 'border-th-border card-glow'
       }`}
       initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -30, scale: 0.95 }}
@@ -125,6 +132,12 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
                 <AlertTriangle size={12} aria-hidden="true" /> Excedido
               </motion.span>
             )}
+            {isExact && (
+              <motion.span className="flex items-center gap-1 text-xs text-accent-green bg-accent-green/10 px-2 py-0.5 rounded"
+                initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
+                <Check size={12} aria-hidden="true" /> Justo en el limite
+              </motion.span>
+            )}
             {isWarning && (
               <motion.span className="flex items-center gap-1 text-xs text-accent-amber bg-accent-amber/10 px-2 py-0.5 rounded"
                 initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
@@ -135,7 +148,7 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm font-mono flex items-center gap-1">
-            <span className={isOver ? 'text-accent-red' : isWarning ? 'text-accent-amber' : 'text-th-text'}>{formatCurrency(spent)}</span>
+            <span className={isOver ? 'text-accent-red' : isExact ? 'text-accent-green' : isWarning ? 'text-accent-amber' : 'text-th-text'}>{formatCurrency(spent)}</span>
             <span className="text-th-muted"> / </span>
             <input type="number" step="1" min="0" value={budget.limit || ''}
               onChange={(e) => updateBudget(budget.category, parseFloat(e.target.value) || 0)}
@@ -151,7 +164,7 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
         </div>
       </div>
       <div className="w-full h-2 bg-th-hover rounded-full overflow-hidden">
-        <motion.div className={`h-full rounded-full progress-shimmer ${isOver ? 'bg-accent-red' : isWarning ? 'bg-accent-amber' : 'bg-accent-green'}`}
+        <motion.div className={`h-full rounded-full progress-shimmer ${isOver ? 'bg-accent-red' : isExact ? 'bg-accent-green' : isWarning ? 'bg-accent-amber' : 'bg-accent-green'}`}
           initial={{ width: 0 }} animate={isInView ? { width: `${Math.min(100, pct * 100)}%` } : { width: 0 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 + index * 0.05 }} />
       </div>
@@ -160,7 +173,7 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
       ) : (
         <div className="flex justify-between mt-2 text-xs text-th-muted">
           <span>{Math.round(pct * 100)}% usado</span>
-          <span>{isOver ? `${formatCurrency(spent - budget.limit)} excedido` : `${formatCurrency(budget.limit - spent)} restante`}</span>
+          <span>{isOver ? `${formatCurrency(spent - budget.limit)} excedido` : isExact ? 'Presupuesto cumplido' : `${formatCurrency(budget.limit - spent)} restante`}</span>
         </div>
       )}
     </motion.div>

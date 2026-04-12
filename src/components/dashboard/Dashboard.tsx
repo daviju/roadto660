@@ -133,12 +133,21 @@ export function Dashboard() {
             icon={<Wallet size={18} />} color="text-accent-green" glowClass="card-glow-green" />
         </motion.div>
         <motion.div variants={fadeUp}>
-          <KPICard title="Ahorro mes"
-            value={formatCurrency(monthIncome > 0 ? monthSavings : totalMonthlyIncome - monthExpenses)}
-            subtitle={`Gastos: ${formatCurrency(monthExpenses)}`}
-            icon={<TrendingUp size={18} />}
-            color={(monthIncome > 0 ? monthSavings : totalMonthlyIncome - monthExpenses) >= 0 ? 'text-accent-green' : 'text-accent-red'}
-            glowClass={(monthIncome > 0 ? monthSavings : totalMonthlyIncome - monthExpenses) >= 0 ? 'card-glow-green' : 'card-glow-red'} />
+          {(() => {
+            const effectiveIncome = monthIncome > 0 ? monthIncome : totalMonthlyIncome;
+            const diff = effectiveIncome - monthExpenses;
+            const isPositive = diff >= 0;
+            return (
+              <KPICard
+                title={isPositive ? 'Disponible este mes' : 'Deficit este mes'}
+                value={formatCurrency(Math.abs(diff))}
+                subtitle={isPositive ? `de ${formatCurrency(effectiveIncome)} de ingresos` : 'Gastos superan ingresos'}
+                icon={<TrendingUp size={18} />}
+                color={isPositive ? 'text-accent-green' : 'text-accent-red'}
+                glowClass={isPositive ? 'card-glow-green' : 'card-glow-red'}
+              />
+            );
+          })()}
         </motion.div>
         <motion.div variants={fadeUp}>
           <KPICard title="Dias restantes" value={`${daysLeft}`}
@@ -177,13 +186,13 @@ export function Dashboard() {
                 <div key={a.category}>
                   <div className="flex items-center justify-between text-sm mb-1">
                     <span className="text-th-secondary truncate">{a.category}</span>
-                    <span className={`font-mono text-xs ${a.pct >= 1 ? 'text-accent-red' : 'text-accent-amber'}`}>
+                    <span className={`font-mono text-xs ${a.pct > 1 ? 'text-accent-red' : 'text-accent-amber'}`}>
                       {formatCurrency(a.spent)} / {formatCurrency(a.limit)}
                     </span>
                   </div>
                   <div className="w-full h-2 bg-th-hover rounded-full overflow-hidden">
                     <motion.div
-                      className={`h-full rounded-full ${a.pct >= 1 ? 'bg-accent-red' : 'bg-accent-amber'}`}
+                      className={`h-full rounded-full ${a.pct > 1 ? 'bg-accent-red' : 'bg-accent-amber'}`}
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min(100, a.pct * 100)}%` }}
                       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}

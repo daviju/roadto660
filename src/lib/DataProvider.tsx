@@ -21,8 +21,6 @@ import type {
   Motorcycle,
   Category,
   Transaction,
-  TimelinePhase,
-  TimelineItem,
   Goal,
   GoalItem,
 } from '../types';
@@ -192,15 +190,12 @@ function derivePhaseStatus(items: PhaseItem[]): Phase['status'] {
   return 'pending';
 }
 
-function toPhases(
-  dbPhases: TimelinePhase[],
-  dbItems: TimelineItem[],
-): Phase[] {
-  return dbPhases
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((p) => {
-      const items: PhaseItem[] = dbItems
-        .filter((i) => i.phase_id === p.id)
+function toPhases(goals: Goal[]): Phase[] {
+  return goals
+    .filter((g) => g.category !== 'motorcycle')
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .map((g) => {
+      const items: PhaseItem[] = (g.items || [])
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((i) => ({
           id: i.id,
@@ -211,9 +206,9 @@ function toPhases(
           paidDate: i.paid_date,
         }));
       return {
-        id: p.id,
-        name: p.name,
-        targetDate: p.target_date || '',
+        id: g.id,
+        name: g.name,
+        targetDate: g.target_date || '',
         status: derivePhaseStatus(items),
         items,
         color: '#94a3b8',
@@ -272,14 +267,35 @@ function buildSettings(
 // ─── Provider ───────────────────────────────────────────────────
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, refreshProfile } = useAuth();
   const setStorePage = useStore((s) => s.setPage);
+
+  // Award points (non-blocking, fire-and-forget)
+  const awardPoints = useCallback(
+    (points: number, reason: string) => {
+      if (!user || points <= 0) return;
+      (async () => {
+        try {
+          await supabase.from('point_events').insert({ user_id: user.id, points, reason });
+          await supabase.rpc('increment_points', { user_id_input: user.id, amount: points }).then(({ error }) => {
+            // If RPC doesn't exist, fallback to manual update
+            if (error) {
+              supabase.from('profiles').select('points').eq('id', user.id).single().then(({ data }) => {
+                if (data) {
+                  supabase.from('profiles').update({ points: (data.points || 0) + points }).eq('id', user.id);
+                }
+              });
+            }
+          });
+        } catch { /* non-critical */ }
+      })();
+    },
+    [user],
+  );
 
   // Raw DB data
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [dbPhases, setDbPhases] = useState<TimelinePhase[]>([]);
-  const [dbPhaseItems, setDbPhaseItems] = useState<TimelineItem[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -293,10 +309,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   transactionsRef.current = transactions;
   const goalsRef = useRef(goals);
   goalsRef.current = goals;
-  const dbPhasesRef = useRef(dbPhases);
-  dbPhasesRef.current = dbPhases;
-  const dbPhaseItemsRef = useRef(dbPhaseItems);
-  dbPhaseItemsRef.current = dbPhaseItems;
   const extraRef = useRef(extra);
   extraRef.current = extra;
 
@@ -306,8 +318,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setCategories([]);
       setTransactions([]);
-      setDbPhases([]);
-      setDbPhaseItems([]);
       setGoals([]);
       setLoading(false);
       return;
@@ -319,11 +329,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       const uid = user!.id;
 
-      const [catRes, txRes, phaseRes, itemRes, goalRes, goalItemRes, snapRes] = await Promise.all([
+      const [catRes, txRes, goalRes, goalItemRes, snapRes] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', uid).order('sort_order'),
         supabase.from('transactions').select('*').eq('user_id', uid).order('transaction_date', { ascending: false }),
-        supabase.from('timeline_phases').select('*').eq('user_id', uid).order('sort_order'),
-        supabase.from('timeline_items').select('*').eq('user_id', uid).order('sort_order'),
         supabase.from('goals').select('*').eq('user_id', uid),
         supabase.from('goal_items').select('*').eq('user_id', uid).order('sort_order'),
         supabase.from('balance_snapshots').select('*').eq('user_id', uid).order('snapshot_date', { ascending: false }).limit(1),
@@ -333,8 +341,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       const cats = (catRes.data || []) as Category[];
       const txs = (txRes.data || []) as Transaction[];
-      const phases = (phaseRes.data || []) as TimelinePhase[];
-      const items = (itemRes.data || []) as TimelineItem[];
       const rawGoals = (goalRes.data || []) as Goal[];
       const rawGoalItems = (goalItemRes.data || []) as GoalItem[];
 
@@ -346,8 +352,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       setCategories(cats);
       setTransactions(txs);
-      setDbPhases(phases);
-      setDbPhaseItems(items);
       setGoals(goalsWithItems);
 
       // Update currentBalance from latest snapshot if available
@@ -375,7 +379,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const expenses = toExpenses(transactions, catMap);
   const incomes = toIncomes(transactions, catMap);
   const budgets = toBudgets(categories);
-  const phases = toPhases(dbPhases, dbPhaseItems);
+  const phases = toPhases(goals);
   const motorcycles = toMotorcycles(goals);
   const settings = buildSettings(profile, categories, extra);
 
@@ -491,9 +495,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           saveExtraSettings(next);
           return next;
         });
+        awardPoints(5, 'Registrar gasto');
       }
     },
-    [user, findOrCreateCategory],
+    [user, findOrCreateCategory, awardPoints],
   );
 
   const addExpenses = useCallback(
@@ -599,9 +604,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           saveExtraSettings(next);
           return next;
         });
+        awardPoints(5, 'Registrar ingreso');
       }
     },
-    [user, findOrCreateCategory],
+    [user, findOrCreateCategory, awardPoints],
   );
 
   const addIncomes = useCallback(
@@ -821,12 +827,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
-  // ── CRUD: Phases ──────────────────────────────────────────────
+  // ── CRUD: Phases (backed by goals + goal_items) ────────────────
+  // Timeline phases ARE goals. Timeline items ARE goal_items.
+  // This ensures Timeline, Metas and Dashboard are always in sync.
 
   const updatePhaseStatus = useCallback(
     async (_phaseId: string, _status: Phase['status']) => {
       // Status is derived from items, so this is a no-op at the DB level.
-      // The UI will see the computed status automatically.
+    },
+    [],
+  );
+
+  // Helper to update goal_items and refresh goals state
+  const refreshGoalItems = useCallback(
+    (goalId: string, itemId: string, updatedItem: GoalItem) => {
+      setGoals((prev) =>
+        prev.map((g) =>
+          g.id === goalId
+            ? { ...g, items: (g.items || []).map((i) => (i.id === itemId ? updatedItem : i)) }
+            : g,
+        ),
+      );
     },
     [],
   );
@@ -838,24 +859,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
         is_paid: paid,
         paid_date: paid ? new Date().toISOString().slice(0, 10) : null,
       };
-      // If paidAmount provided, update cost to reflect actual paid amount
-      if (paidAmount !== undefined) {
-        patch.cost = paidAmount;
-      }
+      if (paidAmount !== undefined) patch.cost = paidAmount;
+
       const { data } = await supabase
-        .from('timeline_items')
+        .from('goal_items')
         .update(patch)
         .eq('id', itemId)
         .eq('user_id', user.id)
         .select()
         .single();
-      if (data) {
-        setDbPhaseItems((prev) =>
-          prev.map((i) => (i.id === itemId ? (data as TimelineItem) : i)),
-        );
-      }
+      if (data) refreshGoalItems(phaseId, itemId, data as GoalItem);
     },
-    [user],
+    [user, refreshGoalItems],
   );
 
   const updatePhaseItem = useCallback(
@@ -871,19 +886,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (updates.paidDate !== undefined) patch.paid_date = updates.paidDate;
 
       const { data } = await supabase
-        .from('timeline_items')
+        .from('goal_items')
         .update(patch)
         .eq('id', itemId)
         .eq('user_id', user.id)
         .select()
         .single();
-      if (data) {
-        setDbPhaseItems((prev) =>
-          prev.map((i) => (i.id === itemId ? (data as TimelineItem) : i)),
-        );
-      }
+      if (data) refreshGoalItems(phaseId, itemId, data as GoalItem);
     },
-    [user],
+    [user, refreshGoalItems],
   );
 
   const updatePhase = useCallback(
@@ -895,23 +906,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       if (Object.keys(patch).length > 0) {
         const { data } = await supabase
-          .from('timeline_phases')
+          .from('goals')
           .update(patch)
           .eq('id', phaseId)
           .eq('user_id', user.id)
           .select()
           .single();
         if (data) {
-          setDbPhases((prev) =>
-            prev.map((p) => (p.id === phaseId ? (data as TimelinePhase) : p)),
+          setGoals((prev) =>
+            prev.map((g) => {
+              if (g.id !== phaseId) return g;
+              const updated = data as Goal;
+              return { ...updated, items: g.items };
+            }),
           );
         }
       }
 
-      // If items are provided in the update, replace them
+      // If items are provided in the update, upsert them
       if (updates.items) {
         for (const item of updates.items) {
-          const existing = dbPhaseItemsRef.current.find((i) => i.id === item.id);
+          const existing = goalsRef.current.find((g) => g.id === phaseId)?.items?.find((i) => i.id === item.id);
           if (existing) {
             await updatePhaseItem(phaseId, item.id, item);
           } else {
@@ -926,13 +941,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addPhaseItemInternal = useCallback(
     async (phaseId: string, item: Omit<PhaseItem, 'id'> & { id?: string }) => {
       if (!user) return;
-      const maxSort = dbPhaseItemsRef.current
-        .filter((i) => i.phase_id === phaseId)
-        .reduce((max, i) => Math.max(max, i.sort_order), -1);
+      const goal = goalsRef.current.find((g) => g.id === phaseId);
+      const maxSort = (goal?.items || []).reduce((max, i) => Math.max(max, i.sort_order), -1);
       const { data } = await supabase
-        .from('timeline_items')
+        .from('goal_items')
         .insert({
-          phase_id: phaseId,
+          goal_id: phaseId,
           user_id: user.id,
           name: item.name,
           cost: item.estimatedCost,
@@ -943,7 +957,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         .select()
         .single();
       if (data) {
-        setDbPhaseItems((prev) => [...prev, data as TimelineItem]);
+        setGoals((prev) =>
+          prev.map((g) =>
+            g.id === phaseId ? { ...g, items: [...(g.items || []), data as GoalItem] } : g,
+          ),
+        );
       }
     },
     [user],
@@ -959,8 +977,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const removePhaseItem = useCallback(
     async (phaseId: string, itemId: string) => {
       if (!user) return;
-      await supabase.from('timeline_items').delete().eq('id', itemId).eq('user_id', user.id);
-      setDbPhaseItems((prev) => prev.filter((i) => i.id !== itemId));
+      await supabase.from('goal_items').delete().eq('id', itemId).eq('user_id', user.id);
+      setGoals((prev) =>
+        prev.map((g) =>
+          g.id === phaseId ? { ...g, items: (g.items || []).filter((i) => i.id !== itemId) } : g,
+        ),
+      );
     },
     [user],
   );
@@ -968,18 +990,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addPhase = useCallback(
     async (name: string, targetDate?: string) => {
       if (!user) return;
-      const maxSort = dbPhasesRef.current.reduce((max, p) => Math.max(max, p.sort_order), -1);
       const { data } = await supabase
-        .from('timeline_phases')
+        .from('goals')
         .insert({
           user_id: user.id,
           name,
           target_date: targetDate || null,
-          sort_order: maxSort + 1,
+          target_amount: 0,
+          category: 'phase',
+          icon: 'target',
+          is_active: true,
         })
         .select()
         .single();
-      if (data) setDbPhases((prev) => [...prev, data as TimelinePhase]);
+      if (data) setGoals((prev) => [...prev, { ...(data as Goal), items: [] }]);
     },
     [user],
   );
@@ -987,10 +1011,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const removePhase = useCallback(
     async (phaseId: string) => {
       if (!user) return;
-      await supabase.from('timeline_items').delete().eq('phase_id', phaseId).eq('user_id', user.id);
-      await supabase.from('timeline_phases').delete().eq('id', phaseId).eq('user_id', user.id);
-      setDbPhaseItems((prev) => prev.filter((i) => i.phase_id !== phaseId));
-      setDbPhases((prev) => prev.filter((p) => p.id !== phaseId));
+      await supabase.from('goal_items').delete().eq('goal_id', phaseId).eq('user_id', user.id);
+      await supabase.from('goals').delete().eq('id', phaseId).eq('user_id', user.id);
+      setGoals((prev) => prev.filter((g) => g.id !== phaseId));
     },
     [user],
   );
@@ -1192,28 +1215,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          // Import phases
+          // Import phases (stored as goals with category='phase')
           if (data.phases && Array.isArray(data.phases)) {
             for (const phase of data.phases as Phase[]) {
-              const { data: pData } = await supabase
-                .from('timeline_phases')
+              const { data: gData } = await supabase
+                .from('goals')
                 .insert({
                   user_id: uid,
                   name: phase.name,
                   target_date: phase.targetDate || null,
-                  sort_order: dbPhasesRef.current.length,
+                  target_amount: 0,
+                  category: 'phase',
+                  icon: 'target',
+                  is_active: true,
                 })
                 .select()
                 .single();
-              if (pData) {
-                const newPhase = pData as TimelinePhase;
-                setDbPhases((prev) => [...prev, newPhase]);
+              if (gData) {
+                const newGoal = gData as Goal;
+                const importedItems: GoalItem[] = [];
 
                 for (const item of phase.items) {
                   const { data: iData } = await supabase
-                    .from('timeline_items')
+                    .from('goal_items')
                     .insert({
-                      phase_id: newPhase.id,
+                      goal_id: newGoal.id,
                       user_id: uid,
                       name: item.name,
                       cost: item.estimatedCost,
@@ -1223,10 +1249,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     })
                     .select()
                     .single();
-                  if (iData) {
-                    setDbPhaseItems((prev) => [...prev, iData as TimelineItem]);
-                  }
+                  if (iData) importedItems.push(iData as GoalItem);
                 }
+                setGoals((prev) => [...prev, { ...newGoal, items: importedItems }]);
               }
             }
           }
@@ -1253,9 +1278,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     // Delete all user transactions
     await supabase.from('transactions').delete().eq('user_id', uid);
-    // Delete all timeline items and phases
-    await supabase.from('timeline_items').delete().eq('user_id', uid);
-    await supabase.from('timeline_phases').delete().eq('user_id', uid);
     // Delete all goals and goal items
     await supabase.from('goal_items').delete().eq('user_id', uid);
     await supabase.from('goals').delete().eq('user_id', uid);
@@ -1277,8 +1299,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     // Clear local state
     setTransactions([]);
-    setDbPhases([]);
-    setDbPhaseItems([]);
     setGoals([]);
   }, [user, updateProfile]);
 

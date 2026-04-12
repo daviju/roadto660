@@ -186,7 +186,7 @@ export function Onboarding() {
   };
 
   const canProceed = () => {
-    if (step === 1) return fullName.trim() && monthlyIncome && parseFloat(monthlyIncome) > 0;
+    if (step === 1) return fullName.trim() && monthlyIncome !== '' && parseFloat(monthlyIncome) >= 0;
     return true;
   };
 
