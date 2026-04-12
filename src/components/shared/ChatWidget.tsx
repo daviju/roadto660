@@ -513,7 +513,7 @@ export function ChatWidget() {
     <>
       <motion.button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 w-12 h-12 rounded-full bg-accent-purple text-white shadow-lg flex items-center justify-center hover:bg-accent-purple/90 transition-colors"
+        className={`fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 w-12 h-12 rounded-full bg-accent-purple text-white shadow-lg flex items-center justify-center hover:bg-accent-purple/90 transition-colors ${open ? 'hidden md:flex' : ''}`}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         aria-label={open ? 'Cerrar asesor' : 'Abrir asesor financiero'}
@@ -538,18 +538,20 @@ export function ChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="fixed bottom-36 md:bottom-20 right-4 md:right-6 z-50 w-[calc(100%-2rem)] max-w-sm bg-th-card border border-th-border rounded-2xl shadow-xl overflow-hidden flex flex-col"
-            style={{ maxHeight: 'calc(100vh - 200px)', height: '480px' }}
+            className="fixed z-50 bg-th-card border border-th-border shadow-xl overflow-hidden flex flex-col inset-0 md:inset-auto md:bottom-20 md:right-6 md:w-[calc(100%-2rem)] md:max-w-sm md:rounded-2xl md:max-h-[calc(100vh-200px)] md:h-[480px]"
           >
             {/* Header */}
-            <div className="px-4 py-3 border-b border-th-border flex items-center gap-2 flex-shrink-0">
+            <div className="px-4 py-3 border-b border-th-border flex items-center gap-2 flex-shrink-0 bg-th-card">
               <div className="w-7 h-7 rounded-full bg-accent-purple/15 flex items-center justify-center">
                 <Bot size={14} className="text-accent-purple" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-medium text-th-text">Asesor financiero</p>
                 <p className="text-[10px] text-th-muted">Respuestas basadas en tus datos</p>
               </div>
+              <button onClick={() => setOpen(false)} className="md:hidden p-1.5 text-th-muted hover:text-th-text transition-colors" aria-label="Cerrar">
+                <X size={18} />
+              </button>
             </div>
 
             {/* Messages */}
@@ -594,12 +596,12 @@ export function ChatWidget() {
             </div>
 
             {/* Quick chips */}
-            <div className="px-3 py-1.5 border-t border-th-border/40 flex gap-1.5 overflow-x-auto flex-shrink-0 scrollbar-none">
+            <div className="px-3 py-1.5 border-t border-th-border/40 flex flex-wrap gap-1.5 flex-shrink-0">
               {SUGGESTIONS.slice(0, 4).map((s) => (
                 <button
                   key={s}
                   onClick={() => handleSend(s)}
-                  className="px-2 py-1 bg-th-hover rounded-md text-[10px] text-th-muted hover:text-th-text transition-colors whitespace-nowrap flex-shrink-0"
+                  className="px-2 py-1 bg-th-hover rounded-md text-[10px] text-th-muted hover:text-th-text transition-colors"
                 >
                   {s}
                 </button>
@@ -607,7 +609,7 @@ export function ChatWidget() {
             </div>
 
             {/* Input */}
-            <div className="px-3 py-2 border-t border-th-border flex gap-2 flex-shrink-0">
+            <div className="px-3 py-2 md:py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] border-t border-th-border flex gap-2 flex-shrink-0 bg-th-card">
               <input
                 ref={inputRef}
                 type="text"

@@ -440,12 +440,12 @@ export function Settings() {
                   <span className="text-[10px] text-th-muted font-mono">{cat.monthly_budget}€</span>
                 )}
                 <motion.button onClick={() => startEditCategory(cat)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-th-muted hover:text-accent-purple transition-all"
+                  className="p-1 text-th-muted hover:text-accent-purple transition-colors"
                   whileTap={{ scale: 0.8 }} aria-label={`Editar ${cat.name}`}>
                   <Pencil size={12} />
                 </motion.button>
                 <motion.button onClick={() => handleDeleteCategory(cat.id, cat.name)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-th-muted hover:text-accent-red transition-all"
+                  className="p-1 text-th-muted hover:text-accent-red transition-colors"
                   whileTap={{ scale: 0.8 }} aria-label={`Eliminar ${cat.name}`}>
                   <Trash2 size={12} />
                 </motion.button>
@@ -509,12 +509,12 @@ export function Settings() {
           <motion.button onClick={handleExport}
             className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-accent-cyan/15 text-accent-cyan rounded-xl text-xs sm:text-sm font-medium hover:bg-accent-cyan/25 transition-colors"
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Download size={14} /> Exportar JSON
+            <Upload size={14} /> Exportar JSON
           </motion.button>
           <motion.button onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-accent-amber/15 text-accent-amber rounded-xl text-xs sm:text-sm font-medium hover:bg-accent-amber/25 transition-colors"
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Upload size={14} /> Importar JSON
+            <Download size={14} /> Importar JSON
           </motion.button>
           <motion.button onClick={() => setShowExcelImport(true)}
             className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-accent-green/15 text-accent-green rounded-xl text-xs sm:text-sm font-medium hover:bg-accent-green/25 transition-colors"

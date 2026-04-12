@@ -1,14 +1,18 @@
 import * as XLSX from 'xlsx';
-import { bankParsers } from '../lib/excel-parsers';
+import {
+  autoDetectColumns,
+  universalParse,
+  getPreviewRows,
+  type ColumnMapping,
+} from '../lib/excel-parsers';
 import type { RawTransaction, ParseResult, ParseError } from '../lib/excel-parsers';
 import { supabase } from '../lib/supabase';
 
 // ─── Public types ─────────────────────────────────────────────
 
-export type { RawTransaction, ParseError };
+export type { RawTransaction, ParseError, ColumnMapping };
 
 export interface ImportSummary {
-  bankId: string;
   all: RawTransaction[];
   newOnes: RawTransaction[];
   duplicates: RawTransaction[];
@@ -17,46 +21,60 @@ export interface ImportSummary {
   skippedRows: number;
 }
 
+export interface ReadFileResult {
+  rows: unknown[][];
+  autoMapping: ColumnMapping | null;
+  preview: { headers: string[]; data: string[][] };
+}
+
 // ─── Step 1: Read Excel/CSV into raw rows ─────────────────────
 
-export function readExcelRows(buffer: ArrayBuffer, isCsv = false): unknown[][] {
+export function readExcelFile(buffer: ArrayBuffer, filename: string): ReadFileResult {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const isCsv = ext === 'csv';
+
   const workbook = isCsv
     ? XLSX.read(buffer, { type: 'array', raw: true, FS: ';' })
     : XLSX.read(buffer, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,     // array of arrays, not objects
-    defval: null,  // empty cells as null
-    raw: true,     // keep numbers as numbers
+    header: 1,
+    defval: null,
+    raw: true,
   });
-  return rows;
-}
 
-// ─── Step 2: Validate format matches bank ─────────────────────
-
-export function validateBankFormat(bankId: string, rows: unknown[][]): boolean {
-  const parser = bankParsers[bankId];
-  if (!parser) return false;
-  return parser.validate(rows);
-}
-
-// ─── Step 3: Parse rows into transactions ─────────────────────
-
-export function parseBank(bankId: string, rows: unknown[][]): ParseResult {
-  const parser = bankParsers[bankId];
-  if (!parser) {
-    return { transactions: [], errors: [{ row: 0, reason: `Parser no encontrado para ${bankId}` }], totalRows: 0 };
+  // If CSV with semicolons produced single-cell rows, retry with comma separator
+  if (isCsv && rows.length > 0 && (rows[0] as unknown[]).length <= 1) {
+    const wb2 = XLSX.read(buffer, { type: 'array', raw: true });
+    const s2 = wb2.Sheets[wb2.SheetNames[0]];
+    const rows2: unknown[][] = XLSX.utils.sheet_to_json(s2, { header: 1, defval: null, raw: true });
+    if (rows2.length > 0 && (rows2[0] as unknown[]).length > 1) {
+      const autoMapping = autoDetectColumns(rows2);
+      const preview = getPreviewRows(rows2);
+      console.log('[Import] CSV re-read with comma separator, auto-mapping:', autoMapping);
+      return { rows: rows2, autoMapping, preview };
+    }
   }
-  return parser.parse(rows);
+
+  const autoMapping = autoDetectColumns(rows);
+  const preview = getPreviewRows(rows);
+  console.log(`[Import] Read ${rows.length} rows, auto-mapping:`, autoMapping);
+
+  return { rows, autoMapping, preview };
 }
 
-// ─── Step 4: Duplicate detection against Supabase ─────────────
+// ─── Step 2: Parse with mapping ───────────────────────────────
+
+export function parseWithMapping(rows: unknown[][], mapping: ColumnMapping): ParseResult {
+  return universalParse(rows, mapping);
+}
+
+// ─── Step 3: Duplicate detection against Supabase ─────────────
 
 export async function checkDuplicates(
   userId: string,
   transactions: RawTransaction[],
 ): Promise<{ newOnes: RawTransaction[]; duplicates: RawTransaction[] }> {
-  // Fetch existing transactions for this user
   const { data: existing, error } = await supabase
     .from('transactions')
     .select('transaction_date, amount, concept')
@@ -64,7 +82,6 @@ export async function checkDuplicates(
 
   if (error) {
     console.error('Error fetching existing transactions for dedup:', error);
-    // If we can't check, treat all as new (safer than blocking import)
     return { newOnes: transactions, duplicates: [] };
   }
 
@@ -90,42 +107,24 @@ export async function checkDuplicates(
   return { newOnes, duplicates };
 }
 
-// ─── Step 5: Build full ImportSummary (parse + dedup) ─────────
-
-const CSV_BANKS = new Set(['caixabank']);
+// ─── Step 4: Build full ImportSummary (parse + dedup) ─────────
 
 export async function buildImportSummary(
-  bankId: string,
-  buffer: ArrayBuffer,
+  rows: unknown[][],
+  mapping: ColumnMapping,
   userId: string,
 ): Promise<ImportSummary> {
-  // 1. Read
-  const isCsv = CSV_BANKS.has(bankId);
-  const rows = readExcelRows(buffer, isCsv);
-  console.log(`[Import] Total filas leidas del archivo: ${rows.length}`);
-
-  // 2. Validate
-  if (!validateBankFormat(bankId, rows)) {
-    throw new Error(
-      `Este archivo no parece ser un extracto de ${bankParsers[bankId]?.bankName ?? bankId}. ` +
-      'Comprueba que has seleccionado el banco correcto y que el archivo es el Excel de movimientos descargado desde tu banca online.'
-    );
-  }
-
-  // 3. Parse
-  const result = parseBank(bankId, rows);
-  console.log(`[Import] Parseadas: ${result.transactions.length}, Errores: ${result.errors.length}`);
+  const result = parseWithMapping(rows, mapping);
+  console.log(`[Import] Parsed: ${result.transactions.length}, Errors: ${result.errors.length}`);
 
   if (result.transactions.length === 0 && result.errors.length === 0) {
-    throw new Error('El archivo no contiene movimientos. Comprueba que has descargado el extracto correcto.');
+    throw new Error('El archivo no contiene movimientos. Comprueba que has seleccionado las columnas correctas.');
   }
 
-  // 4. Dedup
   const { newOnes, duplicates } = await checkDuplicates(userId, result.transactions);
-  console.log(`[Import] Nuevos: ${newOnes.length}, Duplicados: ${duplicates.length}`);
+  console.log(`[Import] New: ${newOnes.length}, Duplicates: ${duplicates.length}`);
 
   return {
-    bankId,
     all: result.transactions,
     newOnes,
     duplicates,
@@ -157,7 +156,7 @@ const CATEGORY_DEFAULTS: Record<string, { name: string; color: string; icon: str
   'otros-ingresos': { name: 'Otros ingresos',   color: '#94a3b8', icon: 'circle',         type: 'income' },
 };
 
-// ─── Step 6: Ensure categories exist, then insert ─────────────
+// ─── Step 5: Ensure categories exist, then insert ─────────────
 
 export async function insertTransactions(
   userId: string,
@@ -165,37 +164,30 @@ export async function insertTransactions(
 ): Promise<{ inserted: number; failed: number }> {
   if (transactions.length === 0) return { inserted: 0, failed: 0 };
 
-  console.log('[Insert] Starting insert, transactions:', transactions.length, 'User:', userId);
-
-  // 1. Collect all unique category slugs needed (excluding _temporal)
+  // 1. Collect unique category slugs (excluding _temporal)
   const neededSlugs = new Set<string>();
   for (const t of transactions) {
     if (t.categorySlug && t.categorySlug !== '_temporal') {
       neededSlugs.add(t.categorySlug);
     }
   }
-  console.log('[Insert] Category slugs needed:', [...neededSlugs]);
 
-  // 2. Fetch existing categories for this user
+  // 2. Fetch existing categories
   const { data: existingCats, error: catFetchErr } = await supabase
     .from('categories')
     .select('id, slug')
     .eq('user_id', userId);
 
-  if (catFetchErr) {
-    console.error('[Insert] Error fetching categories:', catFetchErr);
-  }
+  if (catFetchErr) console.error('[Insert] Error fetching categories:', catFetchErr);
 
   const catMap = new Map<string, string>();
   (existingCats || []).forEach((c: { id: string; slug: string }) => {
     catMap.set(c.slug, c.id);
   });
-  console.log('[Insert] Existing categories:', [...catMap.keys()]);
 
-  // 3. Create missing categories on the fly
+  // 3. Create missing categories
   const missingSlugs = [...neededSlugs].filter((s) => !catMap.has(s));
   if (missingSlugs.length > 0) {
-    console.log('[Insert] Creating missing categories:', missingSlugs);
     const sortBase = (existingCats || []).length;
     const toCreate = missingSlugs.map((slug, i) => {
       const defaults = CATEGORY_DEFAULTS[slug];
@@ -222,11 +214,10 @@ export async function insertTransactions(
       (created || []).forEach((c: { id: string; slug: string }) => {
         catMap.set(c.slug, c.id);
       });
-      console.log('[Insert] Categories after creation:', [...catMap.keys()]);
     }
   }
 
-  // 4. Build transaction records with proper category_id
+  // 4. Build transaction records
   const records = transactions.map((t) => ({
     user_id: userId,
     amount: t.amount,
@@ -244,29 +235,22 @@ export async function insertTransactions(
   let inserted = 0;
   let failed = 0;
   const BATCH = 100;
-  const totalBatches = Math.ceil(records.length / BATCH);
 
   for (let i = 0; i < records.length; i += BATCH) {
-    const batchNum = Math.floor(i / BATCH) + 1;
     const batch = records.slice(i, i + BATCH);
-    console.log(`[Insert] Inserting batch ${batchNum} of ${totalBatches} (${batch.length} records)`);
-
     try {
       const { data, error } = await supabase.from('transactions').insert(batch).select('id');
-      console.log(`[Insert] Batch ${batchNum} result:`, { inserted: data?.length ?? 0, error: error?.message ?? null });
-
       if (error) {
-        console.error(`[Insert] Supabase error in batch ${batchNum}:`, error);
+        console.error('[Insert] Supabase error:', error);
         failed += batch.length;
       } else {
         inserted += (data?.length ?? batch.length);
       }
     } catch (err) {
-      console.error(`[Insert] Exception in batch ${batchNum}:`, err);
+      console.error('[Insert] Exception:', err);
       failed += batch.length;
     }
   }
 
-  console.log(`[Insert] Done. Inserted: ${inserted}, Failed: ${failed}`);
   return { inserted, failed };
 }

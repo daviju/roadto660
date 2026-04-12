@@ -447,8 +447,8 @@ export function Sidebar() {
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   />
                 )}
-                <Icon size={22} aria-hidden="true" />
-                <span className="text-[10px] leading-none">{label}</span>
+                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
+                <span className={`text-[10px] leading-none ${isActive ? 'font-semibold' : 'font-normal'}`}>{label}</span>
               </button>
             );
           })}
@@ -469,8 +469,8 @@ export function Sidebar() {
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
             )}
-            <MoreHorizontal size={22} aria-hidden="true" />
-            <span className="text-[10px] leading-none">Mas</span>
+            <MoreHorizontal size={20} strokeWidth={drawerActive ? 2.5 : 2} aria-hidden="true" />
+            <span className={`text-[10px] leading-none ${drawerActive ? 'font-semibold' : 'font-normal'}`}>Mas</span>
           </button>
         </div>
       </nav>

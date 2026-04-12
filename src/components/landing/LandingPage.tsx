@@ -31,7 +31,7 @@ const FEATURES = [
   {
     icon: <FileSpreadsheet size={24} />,
     title: 'Importacion Excel',
-    desc: 'Importa extractos de BBVA, Unicaja y CaixaBank. Deteccion automatica de duplicados.',
+    desc: 'Importa extractos de cualquier banco. Deteccion automatica de columnas y duplicados.',
   },
   {
     icon: <BarChart3 size={24} />,

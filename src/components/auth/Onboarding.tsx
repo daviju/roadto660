@@ -449,7 +449,7 @@ export function Onboarding() {
                         {importDone ? 'Excel importado correctamente' : 'Importar Excel de mi banco'}
                       </p>
                       <p className="text-xs text-th-muted">
-                        {importDone ? 'Tus movimientos ya estan cargados' : 'BBVA y mas bancos (archivo .xlsx)'}
+                        {importDone ? 'Tus movimientos ya estan cargados' : 'Cualquier banco (archivo .xlsx o .csv)'}
                       </p>
                     </div>
                   </motion.button>

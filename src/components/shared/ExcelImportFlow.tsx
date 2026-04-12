@@ -2,22 +2,24 @@ import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, FileSpreadsheet, X, Check, AlertTriangle,
-  Loader2, Building2,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useAppData } from '../../lib/DataProvider';
 import { usePlan } from '../../hooks/usePlan';
 import { usePaywall } from './PaywallModal';
 import { useToast } from './Toast';
-import { BANK_LIST } from '../../lib/excel-parsers';
+import { ColumnMapper } from './ColumnMapper';
 import {
+  readExcelFile,
   buildImportSummary,
   insertTransactions,
   type ImportSummary,
+  type ColumnMapping,
 } from '../../utils/excelImport';
 import { scaleFade, buttonTap } from '../../utils/animations';
 
-type FlowStep = 'bank' | 'parsing' | 'summary' | 'inserting';
+type FlowStep = 'upload' | 'mapping' | 'parsing' | 'summary' | 'inserting';
 
 interface Props {
   open: boolean;
@@ -33,19 +35,24 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [step, setStep] = useState<FlowStep>('bank');
-  const [selectedBank, setSelectedBank] = useState<string | null>(null);
+  const [step, setStep] = useState<FlowStep>('upload');
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Guard: prevent backdrop close while the native file picker is open
   const [pickingFile, setPickingFile] = useState(false);
 
+  // For column mapping fallback
+  const [rawRows, setRawRows] = useState<unknown[][] | null>(null);
+  const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
+  const [previewData, setPreviewData] = useState<string[][]>([]);
+
   const reset = () => {
-    setStep('bank');
-    setSelectedBank(null);
+    setStep('upload');
     setSummary(null);
     setError(null);
     setPickingFile(false);
+    setRawRows(null);
+    setPreviewHeaders([]);
+    setPreviewData([]);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -55,72 +62,35 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
   };
 
   const handleBackdropClick = () => {
-    // Don't close during file picking, parsing, or inserting
     if (pickingFile || step === 'parsing' || step === 'inserting') return;
     handleClose();
   };
 
-  // ─── Step 1: Bank selected → open file picker ───────────
-  const handleBankSelect = (bankId: string) => {
+  // ─── Open file picker ────────────────────────────────────
+  const handleUploadClick = () => {
     // Check import limit for free users
-    const hasExistingImport = expenses.some((e) => e.createdAt && e.description?.includes('excel'));
+    const hasExistingImport = expenses.some((e) => e.source === 'excel_import');
     if (maxExcelImports === 1 && hasExistingImport) {
       paywall.open('Importaciones ilimitadas');
       return;
     }
-    setSelectedBank(bankId);
     setError(null);
     setPickingFile(true);
-    // Small delay so React can flush the state update before the native dialog opens
-    setTimeout(() => {
-      console.log('[ExcelImport] Opening file picker for bank:', bankId);
-      fileRef.current?.click();
-    }, 150);
+    setTimeout(() => fileRef.current?.click(), 150);
   };
 
-  // ─── Step 2: File selected → parse + dedup ──────────────
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPickingFile(false);
-    const file = e.target.files?.[0];
-    console.log('[ExcelImport] onChange fired. File:', file?.name, 'Size:', file?.size, 'Bank:', selectedBank);
-
-    if (!file) {
-      // User cancelled the file picker
-      console.log('[ExcelImport] No file selected (user cancelled)');
-      return;
-    }
-
-    if (!selectedBank || !user) {
-      console.error('[ExcelImport] Missing selectedBank or user', { selectedBank, user: !!user });
-      return;
-    }
-
-    // Validate extension
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
-      toast.error('Formato no soportado. Sube un archivo Excel (.xlsx, .xls) o CSV (.csv)');
-      return;
-    }
-
-    console.log('[ExcelImport] Starting parse...');
+  // ─── Process file after auto-detect or manual mapping ────
+  const processWithMapping = useCallback(async (rows: unknown[][], mapping: ColumnMapping) => {
+    if (!user) return;
     setStep('parsing');
-    setError(null);
 
     try {
-      const buffer = await file.arrayBuffer();
-      console.log('[ExcelImport] ArrayBuffer read, size:', buffer.byteLength);
-      const result = await buildImportSummary(selectedBank, buffer, user.id);
-      console.log('[ExcelImport] Summary built:', {
-        total: result.all.length,
-        new: result.newOnes.length,
-        dupes: result.duplicates.length,
-        errors: result.errors.length,
-      });
+      const result = await buildImportSummary(rows, mapping, user.id);
 
-      // Check movement-per-import limit for free users
+      // Check movement-per-import limit
       if (result.newOnes.length > maxMovementsPerImport) {
         paywall.open('Importar mas de 50 movimientos por archivo');
-        setStep('bank');
+        setStep('upload');
         return;
       }
 
@@ -128,26 +98,91 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
       setStep('summary');
 
       if (result.errors.length > 0) {
-        toast.warning(`Se omitieron ${result.errors.length} filas con datos incompletos o fechas invalidas.`);
+        toast.warning(`Se omitieron ${result.errors.length} filas con datos incompletos.`);
       }
     } catch (err) {
       console.error('[ExcelImport] Parse error:', err);
-      const msg = err instanceof Error ? err.message : 'No se pudo leer el archivo. Comprueba que no esta danado.';
+      const msg = err instanceof Error ? err.message : 'No se pudo procesar el archivo.';
       setError(msg);
-      setStep('bank');
+      setStep('upload');
+      toast.error(msg);
+    }
+  }, [user, maxMovementsPerImport, paywall, toast]);
+
+  // ─── File selected → read + auto-detect ──────────────────
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPickingFile(false);
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate extension
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
+      toast.error('Formato no soportado. Sube un archivo .xlsx, .xls o .csv');
+      return;
+    }
+
+    setStep('parsing');
+    setError(null);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const { rows, autoMapping, preview } = readExcelFile(buffer, file.name);
+
+      if (rows.length < 2) {
+        throw new Error('El archivo esta vacio o no contiene datos suficientes.');
+      }
+
+      if (autoMapping) {
+        // Auto-detected! Parse directly
+        console.log('[ExcelImport] Auto-detected columns:', autoMapping);
+        await processWithMapping(rows, autoMapping);
+      } else {
+        // Need manual mapping
+        console.log('[ExcelImport] Could not auto-detect columns, showing mapper');
+        setRawRows(rows);
+        setPreviewHeaders(preview.headers);
+        setPreviewData(preview.data);
+        setStep('mapping');
+      }
+    } catch (err) {
+      console.error('[ExcelImport] Read error:', err);
+      const msg = err instanceof Error ? err.message : 'No se pudo leer el archivo.';
+      setError(msg);
+      setStep('upload');
       toast.error(msg);
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
-  }, [selectedBank, user, toast]);
+  }, [user, toast, processWithMapping]);
 
-  // ─── Step 3: User confirms → insert ─────────────────────
+  // ─── Manual mapping confirmed ────────────────────────────
+  const handleMappingConfirm = useCallback(async (mapping: ColumnMapping) => {
+    if (!rawRows) return;
+    // Adjust headerRow: the ColumnMapper passes 0 as placeholder,
+    // but we need to find the actual header row from the preview
+    // The preview was built from the raw rows, so headerRow 0 = first row with content
+    // We need to find it in the raw data
+    let headerRow = 0;
+    for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+      const row = rawRows[i] as unknown[];
+      if (!row) continue;
+      const nonEmpty = row.filter((c) => c !== null && c !== undefined && String(c).trim() !== '').length;
+      if (nonEmpty >= 2) {
+        headerRow = i;
+        break;
+      }
+    }
+    const finalMapping = { ...mapping, headerRow };
+    await processWithMapping(rawRows, finalMapping);
+  }, [rawRows, processWithMapping]);
+
+  // ─── Confirm insert ──────────────────────────────────────
   const handleConfirmInsert = async () => {
     if (!summary || !user) return;
 
-    const newCount = summary.newOnes.length;
-    if (newCount === 0) {
-      toast.info('Todos los registros ya estan en tu cuenta. No se ha importado nada.');
+    if (summary.newOnes.length === 0) {
+      toast.info('Todos los registros ya estan en tu cuenta.');
       handleClose();
       return;
     }
@@ -155,7 +190,6 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
     setStep('inserting');
 
     try {
-      // insertTransactions now handles category creation internally
       const { inserted, failed } = await insertTransactions(user.id, summary.newOnes);
 
       if (failed === 0) {
@@ -164,7 +198,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
           : '';
         toast.success(`Importacion completada: ${inserted} registros importados.${dupeMsg}`);
       } else if (inserted > 0) {
-        toast.warning(`Se importaron ${inserted} de ${inserted + failed} registros. ${failed} no se pudieron guardar.`);
+        toast.warning(`Se importaron ${inserted} de ${inserted + failed}. ${failed} fallaron.`);
       } else {
         toast.error('Error al importar: no se pudieron guardar los registros.');
       }
@@ -173,8 +207,8 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
       handleClose();
     } catch (err) {
       console.error('[ExcelImport] Insert error:', err);
-      toast.error('Error de conexion. Comprueba tu internet e intentalo de nuevo.');
-      setStep('summary'); // Let them retry
+      toast.error('Error de conexion. Intentalo de nuevo.');
+      setStep('summary');
     }
   };
 
@@ -193,20 +227,20 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
         onClick={handleBackdropClick}
       >
         <motion.div
-          className="bg-th-card rounded-2xl p-5 md:p-6 border border-th-border-strong max-w-md w-full space-y-4"
+          className="bg-th-card rounded-2xl p-5 md:p-6 border border-th-border-strong max-w-md w-full space-y-4 max-h-[90vh] overflow-y-auto"
           variants={scaleFade}
           initial="initial"
           animate="animate"
           exit="exit"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* ─── Bank Selector ──────────────────────────────── */}
-          {step === 'bank' && (
+          {/* ─── Upload step ───────────────────────────────── */}
+          {step === 'upload' && (
             <>
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-th-text flex items-center gap-2">
                   <Upload size={20} className="text-accent-purple" />
-                  Importar Excel
+                  Importar movimientos
                 </h3>
                 <button onClick={handleClose} className="text-th-muted hover:text-th-text transition-colors">
                   <X size={18} />
@@ -214,28 +248,19 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
               </div>
 
               <p className="text-sm text-th-secondary">
-                ¿De que banco es tu extracto?
+                Sube el extracto de tu banco en Excel (.xlsx, .xls) o CSV. Se detectaran las columnas automaticamente.
               </p>
 
-              <div className="grid grid-cols-3 gap-2">
-                {BANK_LIST.map((bank) => (
-                  <motion.button
-                    key={bank.id}
-                    onClick={() => bank.enabled && handleBankSelect(bank.id)}
-                    disabled={!bank.enabled || pickingFile}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-colors ${
-                      bank.enabled
-                        ? 'border-th-border hover:border-accent-purple hover:bg-accent-purple/5 text-th-text cursor-pointer'
-                        : 'border-th-border/50 text-th-faint cursor-not-allowed opacity-50'
-                    } ${selectedBank === bank.id ? 'border-accent-purple bg-accent-purple/10' : ''}`}
-                    {...(bank.enabled ? buttonTap : {})}
-                  >
-                    <Building2 size={20} className={bank.enabled ? 'text-accent-purple' : 'text-th-faint'} />
-                    {bank.name}
-                    {!bank.enabled && <span className="text-[9px] text-th-faint">Proximamente</span>}
-                  </motion.button>
-                ))}
-              </div>
+              <motion.button
+                onClick={handleUploadClick}
+                disabled={pickingFile}
+                className="w-full flex flex-col items-center gap-3 p-8 rounded-xl border-2 border-dashed border-th-border hover:border-accent-purple hover:bg-accent-purple/5 transition-colors cursor-pointer"
+                {...buttonTap}
+              >
+                <FileSpreadsheet size={36} className="text-accent-purple" />
+                <span className="text-sm font-medium text-th-text">Seleccionar archivo</span>
+                <span className="text-[11px] text-th-muted">Compatible con cualquier banco</span>
+              </motion.button>
 
               {error && (
                 <div className="flex items-start gap-2 p-3 bg-accent-red/10 border border-accent-red/20 rounded-xl text-xs text-accent-red">
@@ -245,9 +270,20 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
               )}
 
               <p className="text-[11px] text-th-faint text-center">
-                Soportamos BBVA, Unicaja y CaixaBank. Mas bancos proximamente.
+                Funciona con BBVA, Unicaja, CaixaBank, Santander, ING y cualquier otro banco.
+                Si no se detectan las columnas, podras mapearlas manualmente.
               </p>
             </>
+          )}
+
+          {/* ─── Column Mapping step ───────────────────────── */}
+          {step === 'mapping' && (
+            <ColumnMapper
+              headers={previewHeaders}
+              previewData={previewData}
+              onConfirm={handleMappingConfirm}
+              onCancel={handleClose}
+            />
           )}
 
           {/* ─── Parsing spinner ────────────────────────────── */}
@@ -272,7 +308,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
               </div>
 
               <p className="text-sm text-th-secondary">
-                Se encontraron <strong className="text-th-text">{summary.all.length}</strong> movimientos en el archivo:
+                Se encontraron <strong className="text-th-text">{summary.all.length}</strong> movimientos:
               </p>
 
               <div className="space-y-2">
@@ -346,8 +382,6 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
             </div>
           )}
 
-          {/* Hidden file input — INSIDE the stopPropagation div so closing
-              the native file picker doesn't fire a click on the backdrop */}
           <input
             ref={fileRef}
             type="file"
