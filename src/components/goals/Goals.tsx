@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
   Target, TrendingUp, Clock, Sparkles, Crown, Lock,
   CheckCircle2, ChevronDown, ChevronUp, Scissors, Zap,
-  Plus, Pencil, Trash2, Star, X,
+  Plus, Pencil, Trash2, X, Power,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
@@ -177,12 +177,13 @@ export function Goals() {
     setGoals((prev) => prev.filter((g) => g.id !== id));
   };
 
-  const handleSetActive = async (id: string) => {
+  const handleToggleActive = async (id: string) => {
     if (!user) return;
-    // Deactivate all, activate this one
-    await supabase.from('goals').update({ is_active: false }).eq('user_id', user.id);
-    await supabase.from('goals').update({ is_active: true }).eq('id', id).eq('user_id', user.id);
-    setGoals((prev) => prev.map((g) => ({ ...g, is_active: g.id === id })));
+    const goal = goals.find((g) => g.id === id);
+    if (!goal) return;
+    const newActive = !goal.is_active;
+    await supabase.from('goals').update({ is_active: newActive }).eq('id', id).eq('user_id', user.id);
+    setGoals((prev) => prev.map((g) => g.id === id ? { ...g, is_active: newActive } : g));
   };
 
   const handleToggleItem = async (goalId: string, itemId: string, currentPaid: boolean) => {
@@ -245,9 +246,11 @@ export function Goals() {
   };
 
   // ─── Derived data ────────────────────────────────────────
-  const activeGoal = goals.find((g) => g.is_active && !g.is_achieved);
+  const activeGoals = goals.filter((g) => g.is_active && !g.is_achieved);
+  const inactiveGoals = goals.filter((g) => !g.is_active && !g.is_achieved);
   const completedGoals = goals.filter((g) => g.is_achieved);
-  const otherGoals = goals.filter((g) => !g.is_active && !g.is_achieved);
+  // For simulator, use the first active goal (primary)
+  const activeGoal = activeGoals[0] ?? null;
 
   const monthlyIncome = profile?.monthly_income ?? 0;
 
@@ -551,38 +554,44 @@ export function Goals() {
         </motion.div>
       )}
 
-      {/* Active Goal - Hero section */}
-      {activeGoal && (() => {
-        const { totalPaid, progressPct, totalTarget } = getGoalProgress(activeGoal);
+      {/* Active Goals - Hero sections */}
+      {activeGoals.map((goal) => {
+        const { totalPaid, progressPct, totalTarget } = getGoalProgress(goal);
         const remaining = Math.max(0, totalTarget - totalPaid);
         const estimatedMonths = getEstimatedMonths(remaining, monthlySavings);
         const estimatedDate = getEstimatedDate(estimatedMonths);
 
         return (
           <motion.div
+            key={goal.id}
             variants={fadeUp}
             className="bg-th-card rounded-xl p-5 md:p-6 border border-th-border card-glow"
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-accent-purple/15 flex items-center justify-center text-lg">
-                  {activeGoal.icon || '🎯'}
+                  {goal.icon || '🎯'}
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-th-text">{activeGoal.name}</h3>
-                  {activeGoal.description && (
-                    <p className="text-xs text-th-muted mt-0.5">{activeGoal.description}</p>
+                  <h3 className="text-lg font-semibold text-th-text">{goal.name}</h3>
+                  {goal.description && (
+                    <p className="text-xs text-th-muted mt-0.5">{goal.description}</p>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs px-2.5 py-1 bg-accent-green/10 text-accent-green rounded-full font-medium">
-                  Activa
-                </span>
-                <button onClick={() => startEditGoal(activeGoal)} className="p-1.5 text-th-muted hover:text-accent-purple transition-colors" aria-label="Editar meta">
+                <motion.button
+                  onClick={() => handleToggleActive(goal.id)}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-accent-green/10 text-accent-green rounded-full font-medium hover:bg-accent-green/20 transition-colors"
+                  whileTap={{ scale: 0.9 }}
+                  title="Desactivar meta"
+                >
+                  <Power size={10} /> ON
+                </motion.button>
+                <button onClick={() => startEditGoal(goal)} className="p-1.5 text-th-muted hover:text-accent-purple transition-colors" aria-label="Editar meta">
                   <Pencil size={14} />
                 </button>
-                <button onClick={() => handleDeleteGoal(activeGoal.id)} className="p-1.5 text-th-muted hover:text-accent-red transition-colors" aria-label="Eliminar meta">
+                <button onClick={() => handleDeleteGoal(goal.id)} className="p-1.5 text-th-muted hover:text-accent-red transition-colors" aria-label="Eliminar meta">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -658,7 +667,7 @@ export function Goals() {
             </motion.div>
 
             {/* Target date comparison */}
-            {activeGoal.target_date && estimatedDate && (
+            {goal.target_date && estimatedDate && (
               <motion.div
                 className="mt-4 flex items-center gap-2"
                 initial={{ opacity: 0, x: -20 }}
@@ -666,13 +675,13 @@ export function Goals() {
                 transition={{ delay: 0.8, duration: 0.4 }}
               >
                 <Clock size={14} className="text-th-muted" aria-hidden="true" />
-                {estimatedDate <= new Date(activeGoal.target_date) ? (
+                {estimatedDate <= new Date(goal.target_date) ? (
                   <span className="text-sm text-accent-green font-medium">
-                    Llegaras a tiempo (objetivo: {formatDate(activeGoal.target_date)})
+                    Llegaras a tiempo (objetivo: {formatDate(goal.target_date)})
                   </span>
                 ) : (
                   <span className="text-sm text-accent-red font-medium">
-                    Con el ritmo actual llegaras tarde (objetivo: {formatDate(activeGoal.target_date)})
+                    Con el ritmo actual llegaras tarde (objetivo: {formatDate(goal.target_date)})
                   </span>
                 )}
               </motion.div>
@@ -683,19 +692,19 @@ export function Goals() {
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-xs text-th-muted uppercase tracking-wider">Desglose de items</h4>
                 <button
-                  onClick={() => { setAddingItemGoalId(addingItemGoalId === activeGoal.id ? null : activeGoal.id); setNewItemName(''); setNewItemCost(''); }}
+                  onClick={() => { setAddingItemGoalId(addingItemGoalId === goal.id ? null : goal.id); setNewItemName(''); setNewItemCost(''); }}
                   className="text-xs text-accent-purple hover:text-accent-purple/80 flex items-center gap-1"
                 >
                   <Plus size={12} /> Añadir item
                 </button>
               </div>
-              {addingItemGoalId === activeGoal.id && (
+              {addingItemGoalId === goal.id && (
                 <div className="flex gap-2 mb-3">
                   <input type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)}
                     placeholder="Nombre del item" className="flex-1 bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-xs text-th-text focus:border-accent-purple focus:outline-none" />
                   <input type="number" value={newItemCost} onChange={(e) => setNewItemCost(e.target.value)}
                     placeholder="Coste" className="w-24 bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-xs text-th-text font-mono focus:border-accent-purple focus:outline-none" />
-                  <motion.button onClick={() => handleAddItem(activeGoal.id)}
+                  <motion.button onClick={() => handleAddItem(goal.id)}
                     disabled={!newItemName.trim() || !newItemCost}
                     className="px-3 py-1.5 bg-accent-purple text-white rounded-lg text-xs disabled:opacity-50" whileTap={{ scale: 0.95 }}>
                     Añadir
@@ -703,13 +712,13 @@ export function Goals() {
                 </div>
               )}
               <div className="space-y-2">
-                {(activeGoal.items || [])
+                {(goal.items || [])
                   .sort((a, b) => a.sort_order - b.sort_order)
                   .map((item) => (
                     <div key={item.id} className="flex items-center justify-between text-sm group">
                       <button
                         className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                        onClick={() => handleToggleItem(activeGoal.id, item.id, item.is_paid)}
+                        onClick={() => handleToggleItem(goal.id, item.id, item.is_paid)}
                       >
                         {item.is_paid ? (
                           <CheckCircle2 size={14} className="text-accent-green" aria-hidden="true" />
@@ -724,7 +733,7 @@ export function Goals() {
                         <span className={`font-mono text-xs ${item.is_paid ? 'text-accent-green' : 'text-th-text'}`}>
                           {formatCurrency(item.cost)}
                         </span>
-                        <button onClick={() => handleDeleteItem(activeGoal.id, item.id)}
+                        <button onClick={() => handleDeleteItem(goal.id, item.id)}
                           className="opacity-0 group-hover:opacity-100 p-0.5 text-th-muted hover:text-accent-red transition-all"
                           aria-label={`Eliminar ${item.name}`}>
                           <Trash2 size={12} />
@@ -736,7 +745,7 @@ export function Goals() {
             </div>
           </motion.div>
         );
-      })()}
+      })}
 
       {/* Simulator - Scenarios section */}
       {activeGoal && (
@@ -842,22 +851,22 @@ export function Goals() {
         </motion.div>
       )}
 
-      {/* Other goals */}
-      {otherGoals.length > 0 && (
+      {/* Inactive goals */}
+      {inactiveGoals.length > 0 && (
         <motion.div variants={fadeUp}>
           <h3 className="text-lg font-semibold text-th-text mb-4 flex items-center gap-2">
             <Target size={18} className="text-th-muted" aria-hidden="true" />
-            Otras metas
+            Metas desactivadas
           </h3>
           <div className="space-y-3">
-            {otherGoals.map((goal) => {
+            {inactiveGoals.map((goal) => {
               const { totalPaid, progressPct } = getGoalProgress(goal);
               const isExpanded = expandedGoal === goal.id;
 
               return (
                 <motion.div
                   key={goal.id}
-                  className="bg-th-card rounded-xl border border-th-border overflow-hidden"
+                  className="bg-th-card rounded-xl border border-th-border overflow-hidden opacity-60"
                   layout
                 >
                   <button
@@ -871,19 +880,19 @@ export function Goals() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-th-text truncate">{goal.name}</p>
                         <p className="text-xs text-th-muted">
-                          {formatCurrency(totalPaid)} / {formatCurrency(goal.target_amount)}
+                          Desactivada — no cuenta en proyecciones
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
                       <div className="w-20 h-2 bg-th-hover rounded-full overflow-hidden hidden sm:block">
                         <div
-                          className="h-full rounded-full bg-accent-purple/60"
+                          className="h-full rounded-full bg-th-muted/40"
                           style={{ width: `${Math.min(100, progressPct * 100)}%` }}
                         />
                       </div>
                       <span className="font-mono text-xs text-th-muted">
-                        {Math.round(progressPct * 100)}%
+                        {formatCurrency(totalPaid)} / {formatCurrency(goal.target_amount)}
                       </span>
                       {isExpanded ? (
                         <ChevronUp size={16} className="text-th-muted" aria-hidden="true" />
@@ -907,10 +916,11 @@ export function Goals() {
                         )}
                         {/* Action buttons */}
                         <div className="flex flex-wrap gap-2 mb-3">
-                          <button onClick={() => handleSetActive(goal.id)}
-                            className="flex items-center gap-1 px-2.5 py-1 text-[10px] bg-accent-green/10 text-accent-green rounded-lg font-medium hover:bg-accent-green/20 transition-colors">
-                            <Star size={10} /> Activar
-                          </button>
+                          <motion.button onClick={() => handleToggleActive(goal.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[10px] bg-accent-green/10 text-accent-green rounded-lg font-medium hover:bg-accent-green/20 transition-colors"
+                            whileTap={{ scale: 0.9 }}>
+                            <Power size={10} /> Activar
+                          </motion.button>
                           <button onClick={() => startEditGoal(goal)}
                             className="flex items-center gap-1 px-2.5 py-1 text-[10px] bg-th-hover text-th-muted rounded-lg hover:text-th-text transition-colors">
                             <Pencil size={10} /> Editar

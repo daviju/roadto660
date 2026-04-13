@@ -4,7 +4,7 @@ import { MessageCircle, X, Bot, Send, User } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { usePlan } from '../../hooks/usePlan';
 import { formatCurrency } from '../../utils/format';
-import type { Category } from '../../types';
+import type { Category, Phase } from '../../types';
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -27,18 +27,18 @@ interface FinData {
   budgets: { category: string; limit: number }[];
   categories: Category[];
   settings: { currentBalance: number; emergencyFund: number; monthlyIncome: number };
-  motorcycles: { name: string; price: number; active: boolean }[];
+  phases: Phase[];
 }
 
 // ── Chips ───────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
-  'Cuando compro mi meta?',
   'Resumen del mes',
+  'Cuando compro mi meta?',
   'Donde gasto mas?',
-  'Como va mi ahorro?',
-  'Comparar meses',
-  'Presupuestos',
+  'Que pasa si recorto?',
+  'Comparar con mes pasado',
+  'Me paso en algun presupuesto?',
 ];
 
 // ── Period detection ────────────────────────────────────────────
@@ -143,6 +143,13 @@ function defaultPeriod(): Period {
   return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now, label: 'este mes' };
 }
 
+function prevMonthPeriod(): Period {
+  const now = new Date();
+  const m = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+  const y = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  return { start: new Date(y, m, 1), end: new Date(y, m + 1, 0, 23, 59, 59), label: 'mes pasado' };
+}
+
 // ── Calculation helpers ─────────────────────────────────────────
 
 function getAvgMonthlySavings(data: FinData): number {
@@ -170,42 +177,61 @@ function groupByCategory(expenses: { amount: number; category: string }[]): Map<
 type Resp = { text: string; type: 'info' | 'tip' | 'warning' | 'success' };
 
 function goalProjection(data: FinData): Resp {
-  const goal = data.motorcycles.find((m) => m.active);
-  if (!goal) return { text: 'No tienes ninguna meta activa. Ve a Metas y activa una para que pueda calcular.', type: 'info' };
+  // Find active goals from phases
+  const activePhases = data.phases.filter((p) => p.status !== 'completed');
+  if (activePhases.length === 0) {
+    return { text: 'No tienes ninguna meta activa. Ve a Metas y activa una para que pueda calcular.', type: 'info' };
+  }
 
   const avg = getAvgMonthlySavings(data);
-  const available = Math.max(0, data.settings.currentBalance - data.settings.emergencyFund);
-  const remaining = Math.max(0, goal.price - available);
+  const lines: string[] = [];
 
-  if (remaining <= 0) {
-    return { text: `Ya tienes suficiente para ${goal.name}. Tienes ${formatCurrency(available)} disponibles y necesitas ${formatCurrency(goal.price)}.`, type: 'success' };
-  }
-  if (avg <= 0) {
-    return { text: `Con tu ritmo actual no estas ahorrando. Necesitas ${formatCurrency(remaining)} mas para ${goal.name}.`, type: 'warning' };
+  for (const phase of activePhases) {
+    const totalTarget = phase.items.reduce((s, i) => s + i.estimatedCost, 0);
+    const totalPaid = phase.items.filter((i) => i.paid).reduce((s, i) => s + i.estimatedCost, 0);
+    const remaining = Math.max(0, totalTarget - totalPaid);
+
+    if (remaining <= 0) {
+      lines.push(`${phase.name}: Ya completada.`);
+      continue;
+    }
+
+    if (avg <= 0) {
+      lines.push(`${phase.name}: Necesitas ${formatCurrency(remaining)} mas. Sin ahorro mensual no puedo calcular plazo.`);
+      continue;
+    }
+
+    const months = Math.ceil(remaining / avg);
+    const target = new Date();
+    target.setMonth(target.getMonth() + months);
+    const dateStr = target.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    lines.push(`${phase.name}: ${formatCurrency(remaining)} restante → ${dateStr} (${months} ${months === 1 ? 'mes' : 'meses'})`);
   }
 
-  const months = Math.ceil(remaining / avg);
-  const target = new Date();
-  target.setMonth(target.getMonth() + months);
-  const dateStr = target.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const header = activePhases.length === 1 ? 'Proyeccion de tu meta:' : 'Proyeccion de tus metas activas:';
 
   return {
-    text: `A tu ritmo actual (${formatCurrency(avg)}/mes), llegarias a los ${formatCurrency(goal.price)} de ${goal.name} en ${dateStr} (${months} meses).\n\nTe faltan ${formatCurrency(remaining)}. Tienes ${formatCurrency(available)} disponibles.`,
+    text: `${header}\n\n${lines.join('\n')}\n\nAhorro medio: ${formatCurrency(avg)}/mes`,
     type: 'info',
   };
 }
 
 function goalRemaining(data: FinData): Resp {
-  const goal = data.motorcycles.find((m) => m.active);
-  if (!goal) return { text: 'No tienes ninguna meta activa.', type: 'info' };
+  const activePhases = data.phases.filter((p) => p.status !== 'completed');
+  if (activePhases.length === 0) return { text: 'No tienes ninguna meta activa.', type: 'info' };
 
-  const available = Math.max(0, data.settings.currentBalance - data.settings.emergencyFund);
-  const remaining = Math.max(0, goal.price - available);
-  const pct = goal.price > 0 ? Math.round((available / goal.price) * 100) : 0;
+  const lines: string[] = [];
+  for (const phase of activePhases) {
+    const totalTarget = phase.items.reduce((s, i) => s + i.estimatedCost, 0);
+    const totalPaid = phase.items.filter((i) => i.paid).reduce((s, i) => s + i.estimatedCost, 0);
+    const remaining = Math.max(0, totalTarget - totalPaid);
+    const pct = totalTarget > 0 ? Math.round((totalPaid / totalTarget) * 100) : 0;
+    lines.push(`${phase.name}: ${formatCurrency(totalPaid)} / ${formatCurrency(totalTarget)} (${pct}%) — falta ${formatCurrency(remaining)}`);
+  }
 
   return {
-    text: `Meta: ${goal.name} (${formatCurrency(goal.price)})\nAhorrado: ${formatCurrency(available)} (${pct}%)\nFalta: ${formatCurrency(remaining)}`,
-    type: remaining <= 0 ? 'success' : 'info',
+    text: lines.join('\n'),
+    type: lines.every((l) => l.includes('falta 0')) ? 'success' : 'info',
   };
 }
 
@@ -215,16 +241,18 @@ function cutScenario(input: string, data: FinData): Resp {
   const avg = getAvgMonthlySavings(data);
   const newAvg = avg + cut;
 
-  const goal = data.motorcycles.find((m) => m.active);
+  const activePhases = data.phases.filter((p) => p.status !== 'completed');
   let goalPart = '';
-  if (goal) {
-    const available = Math.max(0, data.settings.currentBalance - data.settings.emergencyFund);
-    const remaining = Math.max(0, goal.price - available);
+  if (activePhases.length > 0) {
+    const phase = activePhases[0];
+    const totalTarget = phase.items.reduce((s, i) => s + i.estimatedCost, 0);
+    const totalPaid = phase.items.filter((i) => i.paid).reduce((s, i) => s + i.estimatedCost, 0);
+    const remaining = Math.max(0, totalTarget - totalPaid);
     if (remaining > 0 && newAvg > 0) {
       const before = avg > 0 ? Math.ceil(remaining / avg) : Infinity;
       const after = Math.ceil(remaining / newAvg);
-      const saved = before !== Infinity ? before - after : 0;
-      if (saved > 0) goalPart = `\nLlegarias a ${goal.name} ${saved} ${saved === 1 ? 'mes' : 'meses'} antes.`;
+      const saved = isFinite(before) ? before - after : 0;
+      if (saved > 0) goalPart = `\nLlegarias a ${phase.name} ${saved} ${saved === 1 ? 'mes' : 'meses'} antes.`;
     }
   }
 
@@ -234,7 +262,7 @@ function cutScenario(input: string, data: FinData): Resp {
   };
 }
 
-function periodSummary(data: FinData, period: Period): Resp {
+function fullMonthSummary(data: FinData, period: Period): Resp {
   const exp = filterByPeriod(data.expenses, period);
   const inc = filterByPeriod(data.incomes, period);
   const totalExp = exp.reduce((s, e) => s + e.amount, 0);
@@ -242,20 +270,40 @@ function periodSummary(data: FinData, period: Period): Resp {
   const balance = totalInc - totalExp;
   const savingsRate = totalInc > 0 ? Math.round((balance / totalInc) * 100) : 0;
 
-  const budgetTotal = data.budgets.reduce((s, b) => s + b.limit, 0);
-  let budgetLine = '';
-  if (budgetTotal > 0) {
-    const pct = Math.round((totalExp / budgetTotal) * 100);
-    budgetLine = pct > 100
-      ? `\nPresupuesto: ${pct - 100}% por encima`
-      : `\nPresupuesto: ${pct}% usado`;
+  // Top 3 categories
+  const byCat = groupByCategory(exp);
+  const topCats = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const topLines = topCats.map(([cat, amt], i) => `${i + 1}. ${cat}: ${formatCurrency(amt)}`).join('\n');
+
+  // Budget status
+  const overBudget: string[] = [];
+  for (const b of data.budgets) {
+    if (b.limit <= 0) continue;
+    const spent = byCat.get(b.category) || 0;
+    if (spent > b.limit) {
+      overBudget.push(`${b.category} (${Math.round((spent / b.limit) * 100)}%)`);
+    }
   }
 
-  const type: Resp['type'] = balance >= 0 ? 'success' : 'warning';
+  // Comparison with previous month
+  const prev = prevMonthPeriod();
+  const prevExp = filterByPeriod(data.expenses, prev).reduce((s, e) => s + e.amount, 0);
+  let compLine = '';
+  if (prevExp > 0) {
+    const diff = totalExp - prevExp;
+    const pct = Math.abs(Math.round((diff / prevExp) * 100));
+    compLine = diff > 0
+      ? `\nvs ${prev.label}: gastas un ${pct}% mas`
+      : `\nvs ${prev.label}: gastas un ${pct}% menos. Buen ritmo.`;
+  }
+
+  const budgetLine = overBudget.length > 0
+    ? `\nPresupuestos excedidos: ${overBudget.join(', ')}`
+    : data.budgets.length > 0 ? '\nPresupuestos: todo en orden.' : '';
 
   return {
-    text: `Resumen de ${period.label}:\n\nIngresos: ${formatCurrency(totalInc)}\nGastos: ${formatCurrency(totalExp)}\nBalance: ${formatCurrency(balance)} (tasa de ahorro: ${savingsRate}%)${budgetLine}`,
-    type,
+    text: `Resumen de ${period.label}:\n━━━━━━━━━━━━━━━━━\nIngresos:    ${formatCurrency(totalInc)}\nGastos:       ${formatCurrency(totalExp)}\nDisponible: ${formatCurrency(balance)}\nTasa ahorro:    ${savingsRate}%\n${topCats.length > 0 ? `\nTop gastos:\n${topLines}` : ''}${budgetLine}${compLine}`,
+    type: balance >= 0 ? 'success' : 'warning',
   };
 }
 
@@ -282,29 +330,15 @@ function topExpenses(data: FinData, period: Period, specificCat: Category | null
   return { text: `Top gastos en ${period.label}:\n\n${lines.join('\n')}\n\nTotal: ${formatCurrency(total)}`, type: 'info' };
 }
 
-function savingsSummary(data: FinData, period: Period | null): Resp {
-  if (!period) {
-    const balance = data.settings.currentBalance;
-    const emergency = data.settings.emergencyFund;
-    const available = Math.max(0, balance - emergency);
-    const avg = getAvgMonthlySavings(data);
-
-    return {
-      text: `Saldo en cuenta: ${formatCurrency(balance)}\nColchon de emergencia: ${formatCurrency(emergency)}\nDisponible para metas: ${formatCurrency(available)}\nAhorro medio mensual: ${formatCurrency(avg)}/mes`,
-      type: available > 0 ? 'success' : 'info',
-    };
-  }
-
-  const exp = filterByPeriod(data.expenses, period);
-  const inc = filterByPeriod(data.incomes, period);
-  const totalExp = exp.reduce((s, e) => s + e.amount, 0);
-  const totalInc = inc.reduce((s, i) => s + i.amount, 0);
-  const saved = totalInc - totalExp;
-  const rate = totalInc > 0 ? Math.round((saved / totalInc) * 100) : 0;
+function savingsSummary(data: FinData): Resp {
+  const balance = data.settings.currentBalance;
+  const emergency = data.settings.emergencyFund;
+  const available = Math.max(0, balance - emergency);
+  const avg = getAvgMonthlySavings(data);
 
   return {
-    text: `Ahorro en ${period.label}: ${formatCurrency(saved)}\nTasa de ahorro: ${rate}%\nIngresos: ${formatCurrency(totalInc)}\nGastos: ${formatCurrency(totalExp)}`,
-    type: saved >= 0 ? 'success' : 'warning',
+    text: `Saldo en cuenta: ${formatCurrency(balance)}\nColchon de emergencia: ${formatCurrency(emergency)}\nDisponible para metas: ${formatCurrency(available)}\nAhorro medio mensual: ${formatCurrency(avg)}/mes`,
+    type: available > 0 ? 'success' : 'info',
   };
 }
 
@@ -343,7 +377,6 @@ function comparePeriods(data: FinData, text: string): Resp {
   const curMonth = now.getMonth();
   const curYear = now.getFullYear();
 
-  // Try to find two months in text
   const foundMonths: { name: string; idx: number }[] = [];
   for (const [name, idx] of Object.entries(MONTH_NAMES)) {
     if (text.toLowerCase().includes(name)) foundMonths.push({ name, idx });
@@ -358,7 +391,6 @@ function comparePeriods(data: FinData, text: string): Resp {
     p1 = { start: new Date(yearA, a.idx, 1), end: new Date(yearA, a.idx + 1, 0, 23, 59, 59), label: a.name };
     p2 = { start: new Date(yearB, b.idx, 1), end: new Date(yearB, b.idx + 1, 0, 23, 59, 59), label: b.name };
   } else {
-    // Default: this month vs last month
     const prevM = curMonth === 0 ? 11 : curMonth - 1;
     const prevY = curMonth === 0 ? curYear - 1 : curYear;
     const curName = Object.entries(MONTH_NAMES).find(([, v]) => v === curMonth)?.[0] || 'este mes';
@@ -383,6 +415,72 @@ function comparePeriods(data: FinData, text: string): Resp {
   };
 }
 
+function affordability(input: string, data: FinData): Resp {
+  const amountMatch = input.match(/(\d+[\d.,]*)/);
+  if (!amountMatch) return { text: 'Indica una cantidad. Ej: "Puedo gastar 200?"', type: 'info' };
+  const amount = parseFloat(amountMatch[1].replace(',', '.'));
+
+  const period = defaultPeriod();
+  const totalInc = filterByPeriod(data.incomes, period).reduce((s, i) => s + i.amount, 0);
+  const totalExp = filterByPeriod(data.expenses, period).reduce((s, e) => s + e.amount, 0);
+  const effectiveInc = totalInc > 0 ? totalInc : data.settings.monthlyIncome;
+  const remaining = effectiveInc - totalExp;
+
+  if (amount <= remaining) {
+    return { text: `Si, puedes gastar ${formatCurrency(amount)}. Te quedan ${formatCurrency(remaining)} disponibles este mes.`, type: 'success' };
+  }
+  return { text: `Gastar ${formatCurrency(amount)} te dejaria en negativo. Solo te quedan ${formatCurrency(Math.max(0, remaining))} este mes.`, type: 'warning' };
+}
+
+function advice(data: FinData): Resp {
+  const period = defaultPeriod();
+  const exp = filterByPeriod(data.expenses, period);
+  const byCat = groupByCategory(exp);
+  const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+
+  if (sorted.length === 0) {
+    return { text: 'Registra tus gastos para que pueda darte consejos personalizados.', type: 'info' };
+  }
+
+  const [topCat, topAmt] = sorted[0];
+  const totalExp = exp.reduce((s, e) => s + e.amount, 0);
+  const topPct = Math.round((topAmt / totalExp) * 100);
+
+  const tips: string[] = [];
+
+  if (topPct > 40) {
+    tips.push(`Tu mayor gasto es ${topCat} (${topPct}% del total). Reducirlo un 20% te ahorraria ${formatCurrency(topAmt * 0.2)}/mes.`);
+  }
+
+  const budgetOver = data.budgets.filter((b) => {
+    if (b.limit <= 0) return false;
+    const spent = byCat.get(b.category) || 0;
+    return spent > b.limit;
+  });
+  if (budgetOver.length > 0) {
+    tips.push(`Estas excediendo ${budgetOver.length} presupuesto${budgetOver.length > 1 ? 's' : ''}: ${budgetOver.map((b) => b.category).join(', ')}.`);
+  }
+
+  const avg = getAvgMonthlySavings(data);
+  if (avg <= 0) {
+    tips.push('Tu ahorro mensual es negativo. Intenta reducir gastos o buscar ingresos extra.');
+  } else if (avg < data.settings.monthlyIncome * 0.1) {
+    tips.push(`Tu tasa de ahorro es baja (${formatCurrency(avg)}/mes). El objetivo ideal es al menos un 20% de tus ingresos.`);
+  }
+
+  if (tips.length === 0) {
+    tips.push(`Vas bien. Tu mayor gasto es ${topCat} (${formatCurrency(topAmt)}). Ahorro medio: ${formatCurrency(avg)}/mes.`);
+  }
+
+  return { text: tips.join('\n\n'), type: tips.length === 1 && avg > 0 ? 'success' : 'tip' };
+}
+
+function totalSpent(data: FinData, period: Period): Resp {
+  const exp = filterByPeriod(data.expenses, period);
+  const total = exp.reduce((s, e) => s + e.amount, 0);
+  return { text: `Llevas ${formatCurrency(total)} gastados en ${period.label} (${exp.length} transacciones).`, type: 'info' };
+}
+
 // ── Main router ─────────────────────────────────────────────────
 
 function processMessage(input: string, data: FinData): Resp {
@@ -399,6 +497,16 @@ function processMessage(input: string, data: FinData): Resp {
     return cutScenario(norm, data);
   }
 
+  // Affordability
+  if (/puedo.*gastar|puedo.*permitir|me puedo.*permit|me alcanza/.test(norm)) {
+    return affordability(norm, data);
+  }
+
+  // Advice
+  if (/consejo|sugerencia|que.*hago|como mejorar|tip|recomendacion/.test(norm)) {
+    return advice(data);
+  }
+
   // Comparisons
   if (/compar|vs|versus|mas o menos|mas que|menos que|evolucion/.test(norm)) {
     return comparePeriods(data, norm);
@@ -409,18 +517,23 @@ function processMessage(input: string, data: FinData): Resp {
   const cat = detectCategory(norm, data.categories);
 
   // Expense queries
-  if (/gasto mas|donde gasto|en que gasto|top.*gasto|cuanto.*gast|se me va/.test(norm)) {
+  if (/gasto mas|donde gasto|en que gasto|top.*gasto|cuanto.*gast|se me va|mayor gasto|cual.*mayor/.test(norm)) {
     return topExpenses(data, period || defaultPeriod(), cat);
   }
 
-  // Period summary
-  if (/como voy|resumen|como fue|como va/.test(norm)) {
-    return periodSummary(data, period || defaultPeriod());
+  // How much spent total
+  if (/cuanto llevo|cuanto he gastado|total.*gast/.test(norm)) {
+    return totalSpent(data, period || defaultPeriod());
   }
 
-  // Savings
-  if (/ahorr|cuanto tengo|saldo|tasa.*ahorro/.test(norm)) {
-    return savingsSummary(data, period);
+  // Full summary (resumen, como voy, como va)
+  if (/como voy|resumen|como fue|como va/.test(norm)) {
+    return fullMonthSummary(data, period || defaultPeriod());
+  }
+
+  // Savings/balance
+  if (/ahorr|cuanto tengo|saldo|tasa.*ahorro|cuanto ahorro/.test(norm)) {
+    return savingsSummary(data);
   }
 
   // Budgets
@@ -428,9 +541,9 @@ function processMessage(input: string, data: FinData): Resp {
     return budgetAlerts(data, period || defaultPeriod());
   }
 
-  // If we detect a period but no clear intent, give a summary
+  // If we detect a period but no clear intent, give a full summary
   if (period) {
-    return periodSummary(data, period);
+    return fullMonthSummary(data, period);
   }
 
   // If we detect a category but no clear intent, give category spending
@@ -440,11 +553,13 @@ function processMessage(input: string, data: FinData): Resp {
 
   return {
     text: 'No he entendido tu pregunta. Puedes preguntar cosas como:\n\n' +
-      '- Cuando puedo comprar mi meta?\n' +
-      '- Resumen de marzo\n' +
-      '- En que gasto mas?\n' +
-      '- Como va mi ahorro?\n' +
-      '- Compara enero con febrero\n' +
+      '- Resumen del mes\n' +
+      '- Cuando compro mi meta?\n' +
+      '- Donde gasto mas?\n' +
+      '- Cuanto he gastado en [categoria]?\n' +
+      '- Puedo gastarme 200€?\n' +
+      '- Dame un consejo\n' +
+      '- Comparar con mes pasado\n' +
       '- Presupuestos',
     type: 'info',
   };
@@ -460,7 +575,7 @@ const TYPE_BORDER: Record<string, string> = {
 };
 
 export function ChatWidget() {
-  const { expenses, incomes, budgets, settings, motorcycles, categories } = useAppData();
+  const { expenses, incomes, budgets, settings, phases, categories } = useAppData();
   const { maxChatMessagesPerDay } = usePlan();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -477,7 +592,7 @@ export function ChatWidget() {
     budgets,
     categories,
     settings: { currentBalance: settings.currentBalance, emergencyFund: settings.emergencyFund, monthlyIncome: settings.monthlyIncome },
-    motorcycles: motorcycles.map((m) => ({ name: m.name, price: m.price, active: m.active })),
+    phases,
   };
 
   useEffect(() => {
@@ -490,7 +605,6 @@ export function ChatWidget() {
 
   const handleSend = (text: string) => {
     if (!text.trim()) return;
-    // Enforce daily message limit for free users
     const todayUserMessages = messages.filter((m) => m.role === 'user').length;
     if (todayUserMessages >= maxChatMessagesPerDay) {
       const limitMsg: ChatMessage = {

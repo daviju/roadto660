@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX, ExternalLink, Mail, Send, Pencil } from 'lucide-react';
+import { Save, Download, Upload, RotateCcw, Plus, X, Cloud, FileSpreadsheet, Check, AlertTriangle, LogOut, Shield, Trash2, UserX, ExternalLink, Mail, Send, Pencil, Shuffle } from 'lucide-react';
 import { useAppData } from '../../lib/DataProvider';
 import { useAuth } from '../../lib/auth';
 import { useStore } from '../../store/useStore';
@@ -10,6 +10,23 @@ import { formatCurrency } from '../../utils/format';
 import { staggerContainer, fadeUp, scaleFade } from '../../utils/animations';
 import { ExcelImportFlow } from '../shared/ExcelImportFlow';
 import { PrivacyPolicyModal } from '../legal/PrivacyPolicyModal';
+
+const COLOR_PALETTE = [
+  '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
+  '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9',
+  '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
+  '#ec4899', '#f43f5e', '#78716c', '#64748b', '#0d9488',
+  '#7c3aed', '#c026d3', '#e11d48', '#ea580c', '#65a30d',
+];
+
+function generateUniqueColor(existingColors: string[]): string {
+  const available = COLOR_PALETTE.filter((c) => !existingColors.includes(c));
+  if (available.length === 0) {
+    const hue = Math.floor(Math.random() * 360);
+    return `hsl(${hue}, 70%, 55%)`;
+  }
+  return available[Math.floor(Math.random() * available.length)];
+}
 
 export function Settings() {
   const { settings, updateSettings, exportData, importData, resetData, setPage, categories: dbCategories, addCategory: addCategoryDb, updateCategory: updateCategoryDb, deleteCategory: deleteCategoryDb } = useAppData();
@@ -48,7 +65,7 @@ export function Settings() {
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editCatName, setEditCatName] = useState('');
   const [editCatColor, setEditCatColor] = useState('#a78bfa');
-  const [editCatIcon, setEditCatIcon] = useState('circle');
+  const [editCatIcon] = useState('circle');
   const [editCatType, setEditCatType] = useState<'expense' | 'income' | 'both'>('expense');
   const [editCatBudget, setEditCatBudget] = useState('0');
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -160,7 +177,6 @@ export function Settings() {
     setShowAddCategory(false);
     setEditCatName('');
     setEditCatColor('#a78bfa');
-    setEditCatIcon('circle');
     setEditCatType('expense');
     setEditCatBudget('0');
   };
@@ -169,7 +185,6 @@ export function Settings() {
     setEditingCatId(cat.id);
     setEditCatName(cat.name);
     setEditCatColor(cat.color);
-    setEditCatIcon(cat.icon);
     setEditCatType(cat.type);
     setEditCatBudget(cat.monthly_budget.toString());
     setShowAddCategory(true);
@@ -355,7 +370,7 @@ export function Settings() {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-th-text">Gestionar categorías</h3>
           <motion.button
-            onClick={() => { setEditingCatId(null); setEditCatName(''); setEditCatColor('#a78bfa'); setEditCatIcon('circle'); setEditCatType('expense'); setEditCatBudget('0'); setShowAddCategory(true); }}
+            onClick={() => { setEditingCatId(null); setEditCatName(''); setEditCatColor(generateUniqueColor(dbCategories.map((c) => c.color))); setEditCatType('expense'); setEditCatBudget('0'); setShowAddCategory(true); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-purple/15 text-accent-purple rounded-lg text-xs font-medium hover:bg-accent-purple/25 transition-colors"
             whileTap={{ scale: 0.97 }}
           >
@@ -388,20 +403,23 @@ export function Settings() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] text-th-muted mb-1">Color</label>
-                    <input type="color" value={editCatColor} onChange={(e) => setEditCatColor(e.target.value)}
-                      className="w-full h-8 rounded-lg cursor-pointer border border-th-border" />
+                    <div className="flex gap-2">
+                      <input type="color" value={editCatColor} onChange={(e) => setEditCatColor(e.target.value)}
+                        className="flex-1 h-8 rounded-lg cursor-pointer border border-th-border" />
+                      <motion.button type="button"
+                        onClick={() => setEditCatColor(generateUniqueColor(dbCategories.map((c) => c.color)))}
+                        className="px-2 h-8 bg-th-hover text-th-muted hover:text-accent-purple rounded-lg transition-colors"
+                        whileTap={{ scale: 0.9, rotate: 180 }}
+                        title="Color aleatorio">
+                        <Shuffle size={14} />
+                      </motion.button>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] text-th-muted mb-1">Icono</label>
-                    <input type="text" value={editCatIcon} onChange={(e) => setEditCatIcon(e.target.value)}
-                      placeholder="circle"
-                      className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text focus:border-accent-purple focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-th-muted mb-1">Presupuesto</label>
+                    <label className="block text-[10px] text-th-muted mb-1">Presupuesto mensual</label>
                     <input type="number" min="0" step="1" value={editCatBudget} onChange={(e) => setEditCatBudget(e.target.value)}
                       className="w-full bg-th-input border border-th-border-strong rounded-lg px-3 py-1.5 text-sm text-th-text font-mono focus:border-accent-purple focus:outline-none" />
                   </div>

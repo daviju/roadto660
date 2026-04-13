@@ -192,7 +192,7 @@ function derivePhaseStatus(items: PhaseItem[]): Phase['status'] {
 
 function toPhases(goals: Goal[]): Phase[] {
   return goals
-    .filter((g) => g.category !== 'motorcycle')
+    .filter((g) => g.category !== 'motorcycle' && g.is_active)
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     .map((g) => {
       const items: PhaseItem[] = (g.items || [])
