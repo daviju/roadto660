@@ -9,7 +9,10 @@ export function getAvailableBalance(currentBalance: number, emergencyFund: numbe
 
 export function getTotalObjective(phases: Phase[]): number {
   return phases.reduce(
-    (sum, phase) => sum + phase.items.reduce((s, item) => s + item.estimatedCost, 0),
+    (sum, phase) => {
+      const itemSum = phase.items.reduce((s, item) => s + item.estimatedCost, 0);
+      return sum + (phase.targetAmount > 0 ? Math.max(phase.targetAmount, itemSum) : itemSum);
+    },
     0
   );
 }

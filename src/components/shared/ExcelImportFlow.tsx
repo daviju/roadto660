@@ -15,6 +15,7 @@ import {
   readExcelFile,
   buildImportSummary,
   insertTransactions,
+  addImportLogEntry,
   type ImportSummary,
   type ColumnMapping,
 } from '../../utils/excelImport';
@@ -40,6 +41,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pickingFile, setPickingFile] = useState(false);
+  const [filename, setFilename] = useState<string>('');
 
   // For column mapping fallback
   const [rawRows, setRawRows] = useState<unknown[][] | null>(null);
@@ -54,6 +56,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
     setRawRows(null);
     setPreviewHeaders([]);
     setPreviewData([]);
+    setFilename('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -125,6 +128,7 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
 
     setStep('parsing');
     setError(null);
+    setFilename(file.name);
 
     try {
       const buffer = await file.arrayBuffer();
@@ -191,29 +195,53 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
     setStep('inserting');
 
     try {
-      const { inserted, failed } = await insertTransactions(user.id, summary.newOnes);
+      const { inserted, failed, validationErrors } = await insertTransactions(user.id, summary.newOnes);
+
+      if (validationErrors.length > 0) {
+        console.warn('[ExcelImport] Validation rejections:', validationErrors);
+      }
 
       if (failed === 0) {
         const dupeMsg = summary.duplicates.length > 0
           ? ` ${summary.duplicates.length} duplicados descartados.`
           : '';
-        toast.success(`Importacion completada: ${inserted} registros importados.${dupeMsg}`);
+        const valMsg = validationErrors.length > 0
+          ? ` ${validationErrors.length} descartados por validacion.`
+          : '';
+        toast.success(`Importacion completada: ${inserted} registros importados.${dupeMsg}${valMsg}`);
       } else if (inserted > 0) {
         toast.warning(`Se importaron ${inserted} de ${inserted + failed}. ${failed} fallaron.`);
       } else {
         toast.error('Error al importar: no se pudieron guardar los registros.');
       }
 
-      // Update balance with imported transactions
+      // Audit-trail entry in localStorage
+      addImportLogEntry({
+        timestamp: new Date().toISOString(),
+        filename,
+        totalRows: summary.totalRows,
+        inserted,
+        duplicates: summary.duplicates.length,
+        errors: summary.errors.length,
+        validationErrors: validationErrors.length,
+        finalBalance: summary.finalBalance,
+      });
+
+      // Update balance: prefer the saldo from the Excel file when available
       if (inserted > 0) {
-        const totalExpenses = summary.newOnes
-          .filter((t) => t.type === 'expense')
-          .reduce((s, t) => s + t.amount, 0);
-        const totalIncome = summary.newOnes
-          .filter((t) => t.type === 'income')
-          .reduce((s, t) => s + t.amount, 0);
-        const balanceDelta = totalIncome - totalExpenses;
-        await updateSettings({ currentBalance: settings.currentBalance + balanceDelta });
+        if (summary.finalBalance !== null) {
+          console.log('[ExcelImport] Setting currentBalance from Excel saldo column:', summary.finalBalance);
+          await updateSettings({ currentBalance: summary.finalBalance });
+        } else {
+          const totalExpenses = summary.newOnes
+            .filter((t) => t.type === 'expense')
+            .reduce((s, t) => s + t.amount, 0);
+          const totalIncome = summary.newOnes
+            .filter((t) => t.type === 'income')
+            .reduce((s, t) => s + t.amount, 0);
+          const balanceDelta = totalIncome - totalExpenses;
+          await updateSettings({ currentBalance: settings.currentBalance + balanceDelta });
+        }
 
         // Award points for Excel import (fire-and-forget)
         try {
@@ -368,6 +396,16 @@ export function ExcelImportFlow({ open, onClose, onComplete }: Props) {
                       ))}
                       {summary.errors.length > 5 && <p>...y {summary.errors.length - 5} mas</p>}
                     </div>
+                  </div>
+                )}
+                {summary.finalBalance !== null && (
+                  <div className="flex justify-between text-sm pt-2 border-t border-th-border/50">
+                    <span className="text-accent-cyan flex items-center gap-1.5">
+                      <Check size={12} /> Saldo detectado
+                    </span>
+                    <span className="font-mono text-accent-cyan">
+                      {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(summary.finalBalance)}
+                    </span>
                   </div>
                 )}
               </div>

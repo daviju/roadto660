@@ -10,7 +10,12 @@ import { getMonthExpenses, getExpensesByCategory } from '../../utils/calculation
 import { staggerContainer, fadeUp, listItem, collapseVariants } from '../../utils/animations';
 
 export function Expenses() {
-  const { expenses, addExpense, updateExpense, deleteExpense, settings, budgets } = useAppData();
+  const { expenses, addExpense, updateExpense, deleteExpense, settings, budgets, categories: dbCategories } = useAppData();
+  const catColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    dbCategories.forEach((c) => m.set(c.name, c.color));
+    return m;
+  }, [dbCategories]);
   const { maxHistoryMonths } = usePlan();
   const paywall = usePaywall();
   const { toast } = useToast();
@@ -194,7 +199,17 @@ export function Expenses() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
                       <span className="text-xs text-th-muted font-mono w-20 flex-shrink-0 hidden sm:block">{formatDate(expense.date)}</span>
-                      <span className="text-[10px] sm:text-xs bg-th-hover px-2 py-0.5 rounded text-th-secondary flex-shrink-0">{expense.category}</span>
+                      {(() => {
+                        const catColor = catColorMap.get(expense.category);
+                        return catColor ? (
+                          <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                            style={{ backgroundColor: catColor + '20', color: catColor, border: `1px solid ${catColor}40` }}>
+                            {expense.category}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] sm:text-xs bg-th-hover px-2 py-0.5 rounded text-th-secondary flex-shrink-0">{expense.category}</span>
+                        );
+                      })()}
                       <span className="text-sm text-th-secondary truncate">{expense.description || '-'}</span>
                     </div>
                     <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">

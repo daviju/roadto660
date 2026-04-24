@@ -230,6 +230,7 @@ export interface Phase {
   status: 'pending' | 'in-progress' | 'completed';
   items: PhaseItem[];
   color: string;
+  targetAmount: number;
 }
 
 export interface Motorcycle {

@@ -22,8 +22,9 @@ function EmptyChart({ message, sub }: { message: string; sub?: string }) {
 const COLORS = ['#a78bfa', '#34d399', '#fb923c', '#f87171', '#fbbf24', '#22d3ee', '#818cf8', '#f472b6', '#a3e635', '#94a3b8'];
 
 const tooltipStyle = {
-  contentStyle: { backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-strong)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-primary)' },
-  labelStyle: { color: 'var(--text-muted)' },
+  contentStyle: { backgroundColor: '#1e1e2e', border: '1px solid #333', color: '#f1f5f9', borderRadius: '8px', fontSize: '12px' },
+  labelStyle: { color: '#94a3b8' },
+  itemStyle: { color: '#f1f5f9' },
 };
 
 export function Charts() {
@@ -139,7 +140,7 @@ export function Charts() {
                 <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} width={40} />
                 <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Legend wrapperStyle={{ fontSize: '11px', color: '#f1f5f9' }} />
                 <Line type="monotone" dataKey="projected" name="Proyectado" stroke="#a78bfa" strokeWidth={2} dot={false} animationDuration={1500} />
                 <Line type="monotone" dataKey="required" name="Necesario" stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 5" dot={false} animationDuration={1500} />
                 <Line type="monotone" dataKey="objetivo" name="Objetivo" stroke="#f87171" strokeWidth={1} strokeDasharray="3 3" dot={false} animationDuration={1500} />
@@ -170,7 +171,7 @@ export function Charts() {
               <BarChart data={barData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
-                <YAxis dataKey="name" type="category" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={90} />
+                <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 12 }} width={120} tickFormatter={(v: string) => v.length > 15 ? v.slice(0, 15) + '…' : v} />
                 <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
                 <Bar dataKey="value" name="Gasto" radius={[0, 4, 4, 0]} animationDuration={1200}>
                   {barData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
@@ -191,7 +192,7 @@ export function Charts() {
                   {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <Legend wrapperStyle={{ fontSize: '10px', color: '#f1f5f9' }} />
               </PieChart>
             </ResponsiveContainer>
           ) : <EmptyChart message="Sin gastos en este periodo" sub="Anade gastos para ver la distribucion" />}
@@ -210,7 +211,7 @@ export function Charts() {
                 <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
                 <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} width={40} />
                 <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Legend wrapperStyle={{ fontSize: '11px', color: '#f1f5f9' }} />
                 <Bar dataKey="ingresos" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={1200} />
                 <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} animationDuration={1200} />
               </BarChart>

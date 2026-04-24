@@ -25,8 +25,14 @@ export function Dashboard() {
   const progress = available + totalPaid;
   const progressPct = totalObjective > 0 ? progress / totalObjective : 0;
 
-  const daysLeft = getDaysRemaining(settings.targetDate);
-  const requiredMonthly = getRequiredMonthlySavings(totalObjective, totalPaid, available, settings.targetDate);
+  // Use the latest target date from active phases, falling back to global settings
+  const effectiveTargetDate = phases.reduce((latest, p) => {
+    if (p.targetDate && p.targetDate > latest) return p.targetDate;
+    return latest;
+  }, settings.targetDate);
+
+  const daysLeft = getDaysRemaining(effectiveTargetDate);
+  const requiredMonthly = getRequiredMonthlySavings(totalObjective, totalPaid, available, effectiveTargetDate);
 
   const monthExpenses = getMonthTotalExpenses(expenses, currentMonth, settings.payDay, settings.cycleMode);
   const monthIncome = getMonthTotalIncome(incomes, currentMonth, settings.payDay, settings.cycleMode);
@@ -119,7 +125,10 @@ export function Dashboard() {
               <motion.div animate={{ y: [0, 3, 0] }} transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}>
                 <ArrowDownRight size={16} className="text-accent-red" aria-hidden="true" />
               </motion.div>
-              <span className="text-sm text-accent-red font-medium">Necesitas ahorrar mas para llegar a tiempo</span>
+              <span className="text-sm text-accent-red font-medium">
+                Necesitas {formatCurrency(requiredMonthly)}/mes para {phases.length > 0 ? phases.map((p) => p.name).join(', ') : 'tu objetivo'}
+                {effectiveTargetDate && ` antes de ${new Date(effectiveTargetDate).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`}
+              </span>
             </>
           )}
         </motion.div>

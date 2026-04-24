@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   useRef,
   type ReactNode,
 } from 'react';
@@ -136,10 +137,27 @@ function categoryIdByName(cats: Category[]): Map<string, string> {
   return m;
 }
 
-/** If concept is a generic transfer phrase, prefer original_concept for display */
+/** If concept is a generic bank phrase, prefer original_concept for display */
+const GENERIC_CONCEPTS = [
+  'pago con tarjeta',
+  'transferencia realizada',
+  'transferencia recibida',
+  'pago por internet',
+  'compra en comercio',
+  'adeudo directo',
+  'pago tarjeta',
+  'compra tarjeta',
+  'recibo domiciliado',
+  'bizum enviado',
+  'bizum recibido',
+];
+
 function displayConcept(concept: string | null, originalConcept: string | null): string {
-  if (concept && /^transferencia (realizada|recibida)$/i.test(concept.trim()) && originalConcept) {
-    return originalConcept;
+  if (concept && originalConcept && originalConcept.trim() !== '') {
+    const lower = concept.toLowerCase().trim();
+    if (GENERIC_CONCEPTS.some((g) => lower.includes(g))) {
+      return originalConcept;
+    }
   }
   return concept || originalConcept || '';
 }
@@ -212,6 +230,7 @@ function toPhases(goals: Goal[]): Phase[] {
         status: derivePhaseStatus(items),
         items,
         color: '#94a3b8',
+        targetAmount: Number(g.target_amount) || 0,
       };
     });
 }
@@ -373,15 +392,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // ── Derived legacy data ───────────────────────────────────────
 
-  const catMap = categoryMap(categories);
-  const catIdByName = categoryIdByName(categories);
+  const catMap = useMemo(() => categoryMap(categories), [categories]);
+  const catIdByName = useMemo(() => categoryIdByName(categories), [categories]);
 
-  const expenses = toExpenses(transactions, catMap);
-  const incomes = toIncomes(transactions, catMap);
-  const budgets = toBudgets(categories);
-  const phases = toPhases(goals);
-  const motorcycles = toMotorcycles(goals);
-  const settings = buildSettings(profile, categories, extra);
+  const expenses = useMemo(() => toExpenses(transactions, catMap), [transactions, catMap]);
+  const incomes = useMemo(() => toIncomes(transactions, catMap), [transactions, catMap]);
+  const budgets = useMemo(() => toBudgets(categories), [categories]);
+  const phases = useMemo(() => toPhases(goals), [goals]);
+  const motorcycles = useMemo(() => toMotorcycles(goals), [goals]);
+  const settings = useMemo(() => buildSettings(profile, categories, extra), [profile, categories, extra]);
 
   // ── CRUD: Settings ────────────────────────────────────────────
 

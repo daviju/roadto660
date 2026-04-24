@@ -7,6 +7,7 @@ export interface ColumnMapping {
   conceptCol: number;
   amountCol: number;
   detailCol: number | null; // optional secondary concept/movimiento column
+  balanceCol: number | null; // optional running balance column (saldo)
   headerRow: number;
 }
 
@@ -87,6 +88,7 @@ const DATE_PATTERNS = /^(fecha|date|f\.?\s*valor|f\.?\s*operaci[oó]n|data|fecha
 const CONCEPT_PATTERNS = /^(concepto|descripci[oó]n|description|concept|detalle|movimiento|observaciones|referencia|comercio)$/i;
 const AMOUNT_PATTERNS = /^(importe|amount|cantidad|monto|valor|saldo\s*mov|cargo|abono|d[eé]bito|cr[eé]dito)$/i;
 const DETAIL_PATTERNS = /^(movimiento|observaciones|detalle|informaci[oó]n\s*adicional|referencia|concepto\s*ampliado|mas\s*datos)$/i;
+const BALANCE_PATTERNS = /^(saldo|balance|saldo\s*(final|posterior|disponible|actual|cuenta))$/i;
 
 export function autoDetectColumns(rows: unknown[][]): ColumnMapping | null {
   const limit = Math.min(rows.length, 15);
@@ -99,12 +101,14 @@ export function autoDetectColumns(rows: unknown[][]): ColumnMapping | null {
     let conceptCol = -1;
     let amountCol = -1;
     let detailCol: number | null = null;
+    let balanceCol: number | null = null;
 
     for (let j = 0; j < row.length; j++) {
       const header = String(row[j] ?? '').trim();
       if (!header) continue;
 
       if (dateCol === -1 && DATE_PATTERNS.test(header)) dateCol = j;
+      else if (balanceCol === null && BALANCE_PATTERNS.test(header)) balanceCol = j;
       else if (amountCol === -1 && AMOUNT_PATTERNS.test(header)) amountCol = j;
       else if (conceptCol === -1 && CONCEPT_PATTERNS.test(header)) conceptCol = j;
       else if (detailCol === null && DETAIL_PATTERNS.test(header)) detailCol = j;
@@ -115,14 +119,14 @@ export function autoDetectColumns(rows: unknown[][]): ColumnMapping | null {
       // If no concept column found, try to pick the first text-like column that isn't date or amount
       if (conceptCol === -1) {
         for (let j = 0; j < row.length; j++) {
-          if (j !== dateCol && j !== amountCol) {
+          if (j !== dateCol && j !== amountCol && j !== balanceCol) {
             conceptCol = j;
             break;
           }
         }
       }
 
-      return { dateCol, conceptCol, amountCol, detailCol, headerRow: i };
+      return { dateCol, conceptCol, amountCol, detailCol, balanceCol, headerRow: i };
     }
   }
 
@@ -238,6 +242,8 @@ export function universalParse(rows: unknown[][], mapping: ColumnMapping): Parse
 
   const dataStart = mapping.headerRow + 1;
   let totalRows = 0;
+  let latestDate = '';
+  let finalBalance: number | null = null;
 
   for (let i = dataStart; i < rows.length; i++) {
     const row = rows[i] as unknown[] | null;
@@ -248,6 +254,7 @@ export function universalParse(rows: unknown[][], mapping: ColumnMapping): Parse
     const conceptCell = mapping.conceptCol >= 0 ? row[mapping.conceptCol] : null;
     const amountCell = row[mapping.amountCol];
     const detailCell = mapping.detailCol !== null ? row[mapping.detailCol] : null;
+    const balanceCell = mapping.balanceCol !== null ? row[mapping.balanceCol] : null;
 
     // Skip empty rows
     if (dateCell === null || dateCell === undefined) continue;
@@ -276,6 +283,15 @@ export function universalParse(rows: unknown[][], mapping: ColumnMapping): Parse
       continue;
     }
 
+    // Track the balance from the row with the latest date
+    if (balanceCell !== null && balanceCell !== undefined && isoDate >= latestDate) {
+      const parsedBalance = parseAmount(balanceCell);
+      if (parsedBalance !== null) {
+        latestDate = isoDate;
+        finalBalance = parsedBalance;
+      }
+    }
+
     // Skip zero amounts
     if (amount === 0) continue;
 
@@ -295,7 +311,7 @@ export function universalParse(rows: unknown[][], mapping: ColumnMapping): Parse
     });
   }
 
-  return { transactions, errors, totalRows };
+  return { transactions, errors, totalRows, finalBalance };
 }
 
 // ─── Get preview rows for ColumnMapper UI ────────────────────────

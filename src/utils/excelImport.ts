@@ -19,6 +19,7 @@ export interface ImportSummary {
   errors: ParseError[];
   totalRows: number;
   skippedRows: number;
+  finalBalance: number | null;
 }
 
 export interface ReadFileResult {
@@ -131,6 +132,7 @@ export async function buildImportSummary(
     errors: result.errors,
     totalRows: result.totalRows,
     skippedRows: result.errors.length,
+    finalBalance: result.finalBalance ?? null,
   };
 }
 
@@ -156,13 +158,48 @@ const CATEGORY_DEFAULTS: Record<string, { name: string; color: string; icon: str
   'otros-ingresos': { name: 'Otros ingresos',   color: '#94a3b8', icon: 'circle',         type: 'income' },
 };
 
+// ─── Validation ───────────────────────────────────────────────
+
+function validateTransaction(t: RawTransaction): string | null {
+  if (!t.transaction_date || !/^\d{4}-\d{2}-\d{2}$/.test(t.transaction_date)) {
+    return `Fecha invalida: ${t.transaction_date}`;
+  }
+  const year = parseInt(t.transaction_date.substring(0, 4));
+  if (year < 1990 || year > 2040) return `Fecha fuera de rango: ${t.transaction_date}`;
+  if (typeof t.amount !== 'number' || !isFinite(t.amount)) return `Importe no valido: ${t.amount}`;
+  if (t.amount <= 0) return `Importe debe ser mayor que 0: ${t.amount}`;
+  if (t.amount > 1_000_000) return `Importe sospechosamente alto: ${t.amount}`;
+  if (t.type !== 'income' && t.type !== 'expense') return `Tipo invalido: ${t.type}`;
+  if (!t.concept || t.concept.trim().length === 0) return 'Concepto vacio';
+  return null;
+}
+
 // ─── Step 5: Ensure categories exist, then insert ─────────────
 
 export async function insertTransactions(
   userId: string,
   transactions: RawTransaction[],
-): Promise<{ inserted: number; failed: number }> {
-  if (transactions.length === 0) return { inserted: 0, failed: 0 };
+): Promise<{ inserted: number; failed: number; validationErrors: string[] }> {
+  if (transactions.length === 0) return { inserted: 0, failed: 0, validationErrors: [] };
+
+  // Validate each transaction before touching the database
+  const validationErrors: string[] = [];
+  const valid: RawTransaction[] = [];
+  for (const t of transactions) {
+    const err = validateTransaction(t);
+    if (err) {
+      validationErrors.push(`${t.transaction_date || '?'} - ${t.concept || '?'}: ${err}`);
+    } else {
+      valid.push(t);
+    }
+  }
+  if (validationErrors.length > 0) {
+    console.warn('[Insert] Validation errors:', validationErrors);
+  }
+  if (valid.length === 0) {
+    return { inserted: 0, failed: transactions.length, validationErrors };
+  }
+  transactions = valid;
 
   // 1. Collect unique category slugs (excluding _temporal)
   const neededSlugs = new Set<string>();
@@ -252,5 +289,42 @@ export async function insertTransactions(
     }
   }
 
-  return { inserted, failed };
+  return { inserted, failed, validationErrors };
+}
+
+// ─── Import logging (localStorage-backed audit trail) ─────────
+
+const LS_IMPORT_LOG_KEY = 'roadto660-import-log';
+const MAX_IMPORT_LOG_ENTRIES = 20;
+
+export interface ImportLogEntry {
+  timestamp: string; // ISO datetime
+  filename: string;
+  totalRows: number;
+  inserted: number;
+  duplicates: number;
+  errors: number;
+  validationErrors: number;
+  finalBalance: number | null;
+}
+
+export function addImportLogEntry(entry: ImportLogEntry): void {
+  try {
+    const raw = localStorage.getItem(LS_IMPORT_LOG_KEY);
+    const log: ImportLogEntry[] = raw ? JSON.parse(raw) : [];
+    log.unshift(entry);
+    const trimmed = log.slice(0, MAX_IMPORT_LOG_ENTRIES);
+    localStorage.setItem(LS_IMPORT_LOG_KEY, JSON.stringify(trimmed));
+  } catch (err) {
+    console.warn('[ImportLog] Could not save entry:', err);
+  }
+}
+
+export function getImportLog(): ImportLogEntry[] {
+  try {
+    const raw = localStorage.getItem(LS_IMPORT_LOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 }

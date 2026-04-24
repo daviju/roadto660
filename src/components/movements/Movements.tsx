@@ -11,7 +11,7 @@ import { staggerContainer, fadeUp, listItem } from '../../utils/animations';
 import type { Movement } from '../../types';
 
 export function Movements() {
-  const { expenses, incomes, settings, updateExpense, deleteExpense, updateIncome, deleteIncome } = useAppData();
+  const { expenses, incomes, settings, updateExpense, deleteExpense, updateIncome, deleteIncome, categories: dbCategories } = useAppData();
   const { maxHistoryMonths } = usePlan();
   const paywall = usePaywall();
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth(settings.payDay, settings.cycleMode));
@@ -23,6 +23,12 @@ export function Movements() {
   const [editAmount, setEditAmount] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const { toast } = useToast();
+
+  const catColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    dbCategories.forEach((c) => m.set(c.name, c.color));
+    return m;
+  }, [dbCategories]);
 
   // Build month options (limited to maxHistoryMonths for free users)
   const months = useMemo(() => {
@@ -223,9 +229,19 @@ export function Movements() {
                           }
                         </div>
                         <span className="text-xs text-th-muted font-mono w-16 hidden sm:block flex-shrink-0">{formatDate(m.date)}</span>
-                        <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
-                          m.type === 'income' ? 'bg-accent-green/10 text-accent-green' : 'bg-th-hover text-th-muted'
-                        }`}>{m.category}</span>
+                        {(() => {
+                          const catColor = catColorMap.get(m.category);
+                          return catColor ? (
+                            <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium"
+                              style={{ backgroundColor: catColor + '20', color: catColor, border: `1px solid ${catColor}40` }}>
+                              {m.category}
+                            </span>
+                          ) : (
+                            <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                              m.type === 'income' ? 'bg-accent-green/10 text-accent-green' : 'bg-th-hover text-th-muted'
+                            }`}>{m.category}</span>
+                          );
+                        })()}
                         <span className="text-sm text-th-secondary truncate">{m.description}</span>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">

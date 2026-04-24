@@ -12,11 +12,28 @@ import { ExcelImportFlow } from '../shared/ExcelImportFlow';
 import { PrivacyPolicyModal } from '../legal/PrivacyPolicyModal';
 
 const COLOR_PALETTE = [
-  '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
-  '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9',
-  '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
-  '#ec4899', '#f43f5e', '#78716c', '#64748b', '#0d9488',
-  '#7c3aed', '#c026d3', '#e11d48', '#ea580c', '#65a30d',
+  // Rojos
+  '#ef4444', '#dc2626', '#f87171', '#fb7185',
+  // Naranjas
+  '#f97316', '#ea580c', '#fb923c', '#fdba74',
+  // Amarillos
+  '#eab308', '#ca8a04', '#facc15', '#fde047',
+  // Verdes
+  '#22c55e', '#16a34a', '#4ade80', '#86efac',
+  '#10b981', '#059669', '#34d399', '#6ee7b7',
+  // Cyans
+  '#06b6d4', '#0891b2', '#22d3ee', '#67e8f9',
+  // Azules
+  '#3b82f6', '#2563eb', '#60a5fa', '#93c5fd',
+  '#0ea5e9', '#0284c7',
+  // Purpuras
+  '#8b5cf6', '#7c3aed', '#a78bfa', '#c4b5fd',
+  '#6366f1', '#4f46e5',
+  // Rosas
+  '#ec4899', '#db2777', '#f472b6', '#f9a8d4',
+  '#d946ef', '#c026d3',
+  // Grises
+  '#78716c', '#a8a29e', '#64748b', '#94a3b8',
 ];
 
 function generateUniqueColor(existingColors: string[]): string {

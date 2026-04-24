@@ -15,6 +15,7 @@ export function ColumnMapper({ headers, previewData, onConfirm, onCancel }: Prop
   const [conceptCol, setConceptCol] = useState(-1);
   const [amountCol, setAmountCol] = useState(-1);
   const [detailCol, setDetailCol] = useState(-1);
+  const [balanceCol, setBalanceCol] = useState(-1);
 
   const isValid = dateCol >= 0 && amountCol >= 0;
 
@@ -25,6 +26,7 @@ export function ColumnMapper({ headers, previewData, onConfirm, onCancel }: Prop
       conceptCol: conceptCol >= 0 ? conceptCol : dateCol === 0 ? 1 : 0,
       amountCol,
       detailCol: detailCol >= 0 ? detailCol : null,
+      balanceCol: balanceCol >= 0 ? balanceCol : null,
       headerRow: 0, // will be adjusted by the caller
     });
   };
@@ -89,6 +91,18 @@ export function ColumnMapper({ headers, previewData, onConfirm, onCancel }: Prop
             {colOptions.map((o) => <option key={`dt${o.value}`} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+
+        <div>
+          <label className="block text-xs text-th-muted mb-1">Saldo (opcional)</label>
+          <select
+            value={balanceCol}
+            onChange={(e) => setBalanceCol(Number(e.target.value))}
+            className="w-full bg-th-input border border-th-border rounded-lg px-3 py-2 text-sm text-th-text focus:border-accent-purple focus:outline-none"
+          >
+            {colOptions.map((o) => <option key={`b${o.value}`} value={o.value}>{o.label}</option>)}
+          </select>
+          <p className="text-[10px] text-th-muted mt-1">Si tu Excel tiene una columna de saldo/balance, se usara para actualizar tu saldo actual.</p>
+        </div>
       </div>
 
       {/* Preview table */}
@@ -102,13 +116,15 @@ export function ColumnMapper({ headers, previewData, onConfirm, onCancel }: Prop
                     i === dateCol ? 'bg-accent-purple/10 text-accent-purple' :
                     i === conceptCol ? 'bg-accent-blue/10 text-accent-blue' :
                     i === amountCol ? 'bg-accent-green/10 text-accent-green' :
-                    i === detailCol ? 'bg-accent-amber/10 text-accent-amber' : ''
+                    i === detailCol ? 'bg-accent-amber/10 text-accent-amber' :
+                    i === balanceCol ? 'bg-accent-cyan/10 text-accent-cyan' : ''
                   }`}>
                     {h || `Col ${i + 1}`}
                     {i === dateCol && <span className="ml-1 text-[8px]">FECHA</span>}
                     {i === conceptCol && <span className="ml-1 text-[8px]">CONCEPTO</span>}
                     {i === amountCol && <span className="ml-1 text-[8px]">IMPORTE</span>}
                     {i === detailCol && <span className="ml-1 text-[8px]">DETALLE</span>}
+                    {i === balanceCol && <span className="ml-1 text-[8px]">SALDO</span>}
                   </th>
                 ))}
               </tr>
@@ -121,7 +137,8 @@ export function ColumnMapper({ headers, previewData, onConfirm, onCancel }: Prop
                       ci === dateCol ? 'bg-accent-purple/5' :
                       ci === conceptCol ? 'bg-accent-blue/5' :
                       ci === amountCol ? 'bg-accent-green/5' :
-                      ci === detailCol ? 'bg-accent-amber/5' : ''
+                      ci === detailCol ? 'bg-accent-amber/5' :
+                      ci === balanceCol ? 'bg-accent-cyan/5' : ''
                     }`}>
                       {cell}
                     </td>

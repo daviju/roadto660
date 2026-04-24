@@ -19,6 +19,7 @@ export interface ParseResult {
   transactions: RawTransaction[];
   errors: ParseError[];
   totalRows: number;
+  finalBalance?: number | null; // Balance from the latest-dated row, if Excel had a saldo column
 }
 
 export interface BankParser {
