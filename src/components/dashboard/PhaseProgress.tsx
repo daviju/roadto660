@@ -13,17 +13,29 @@ export function PhaseProgress({ phase }: { phase: Phase }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-50px' });
 
+  const isInactive = phase.isActive === false;
+
   return (
-    <motion.div ref={ref} className="bg-th-card rounded-xl p-4 border border-th-border card-glow"
+    <motion.div ref={ref}
+      className={`bg-th-card rounded-xl p-4 border card-glow ${
+        isInactive ? 'border-th-border opacity-50' : 'border-accent-purple/30'
+      }`}
       whileHover={{ y: -2, transition: { type: 'spring', stiffness: 400, damping: 25 } }}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <motion.div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: phase.color }}
-            animate={phase.status === 'in-progress' ? { scale: [1, 1.3, 1], opacity: [1, 0.7, 1] } : {}}
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <motion.div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: phase.color }}
+            animate={phase.status === 'in-progress' && !isInactive ? { scale: [1, 1.3, 1], opacity: [1, 0.7, 1] } : {}}
             transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }} aria-hidden="true" />
-          <span className="text-sm font-medium text-th-text">{phase.name}</span>
+          <span className="text-sm font-medium text-th-text truncate">{phase.name}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+            isInactive
+              ? 'bg-th-hover text-th-muted'
+              : 'bg-accent-purple/15 text-accent-purple'
+          }`}>
+            {isInactive ? 'Desactivada' : 'Activa'}
+          </span>
         </div>
-        <span className="text-xs text-th-muted">{paidItems}/{totalItems} items</span>
+        <span className="text-xs text-th-muted flex-shrink-0">{paidItems}/{totalItems} items</span>
       </div>
       <div className="w-full h-2 bg-th-hover rounded-full overflow-hidden mb-2" role="progressbar"
         aria-valuenow={Math.round(pct * 100)} aria-valuemin={0} aria-valuemax={100}>

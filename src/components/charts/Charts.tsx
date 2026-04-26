@@ -167,11 +167,11 @@ export function Charts() {
             Gastos por categoria {isGlobal ? '(acumulado)' : ''}
           </h3>
           {barData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={Math.max(300, barData.length * 35)}>
               <BarChart data={barData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
-                <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 12 }} width={120} tickFormatter={(v: string) => v.length > 15 ? v.slice(0, 15) + '…' : v} />
+                <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 12 }} width={120} interval={0} tickFormatter={(v: string) => v.length > 15 ? v.slice(0, 15) + '…' : v} />
                 <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
                 <Bar dataKey="value" name="Gasto" radius={[0, 4, 4, 0]} animationDuration={1200}>
                   {barData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}

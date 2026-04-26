@@ -178,7 +178,7 @@ type Resp = { text: string; type: 'info' | 'tip' | 'warning' | 'success' };
 
 function goalProjection(data: FinData): Resp {
   // Find active goals from phases
-  const activePhases = data.phases.filter((p) => p.status !== 'completed');
+  const activePhases = data.phases.filter((p) => p.status !== 'completed' && p.isActive !== false);
   if (activePhases.length === 0) {
     return { text: 'No tienes ninguna meta activa. Ve a Metas y activa una para que pueda calcular.', type: 'info' };
   }
@@ -217,7 +217,7 @@ function goalProjection(data: FinData): Resp {
 }
 
 function goalRemaining(data: FinData): Resp {
-  const activePhases = data.phases.filter((p) => p.status !== 'completed');
+  const activePhases = data.phases.filter((p) => p.status !== 'completed' && p.isActive !== false);
   if (activePhases.length === 0) return { text: 'No tienes ninguna meta activa.', type: 'info' };
 
   const lines: string[] = [];
@@ -241,7 +241,7 @@ function cutScenario(input: string, data: FinData): Resp {
   const avg = getAvgMonthlySavings(data);
   const newAvg = avg + cut;
 
-  const activePhases = data.phases.filter((p) => p.status !== 'completed');
+  const activePhases = data.phases.filter((p) => p.status !== 'completed' && p.isActive !== false);
   let goalPart = '';
   if (activePhases.length > 0) {
     const phase = activePhases[0];

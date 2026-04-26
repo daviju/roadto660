@@ -25,11 +25,13 @@ export function Dashboard() {
   const progress = available + totalPaid;
   const progressPct = totalObjective > 0 ? progress / totalObjective : 0;
 
-  // Use the latest target date from active phases, falling back to global settings
-  const effectiveTargetDate = phases.reduce((latest, p) => {
-    if (p.targetDate && p.targetDate > latest) return p.targetDate;
-    return latest;
-  }, settings.targetDate);
+  // Use the latest target date from ACTIVE phases. Only fall back to settings
+  // if no active phase has a target date (otherwise settings.targetDate would dominate).
+  const activePhases = phases.filter((p) => p.isActive);
+  const phaseDates = activePhases.map((p) => p.targetDate).filter((d): d is string => !!d);
+  const effectiveTargetDate = phaseDates.length > 0
+    ? phaseDates.reduce((latest, d) => d > latest ? d : latest)
+    : settings.targetDate;
 
   const daysLeft = getDaysRemaining(effectiveTargetDate);
   const requiredMonthly = getRequiredMonthlySavings(totalObjective, totalPaid, available, effectiveTargetDate);
@@ -39,7 +41,10 @@ export function Dashboard() {
   const monthSavings = monthIncome - monthExpenses;
   const totalMonthlyIncome = settings.monthlyIncome + settings.cashbackNet;
 
-  const isOnTrack = monthSavings >= 0 ? (totalMonthlyIncome - monthExpenses) >= requiredMonthly : false;
+  // If no extra savings are required, the goal is already funded → on track.
+  const isOnTrack = requiredMonthly <= 0
+    ? true
+    : monthSavings >= 0 && (totalMonthlyIncome - monthExpenses) >= requiredMonthly;
 
   // Daily widget data
   const today = todayISO();
@@ -118,7 +123,11 @@ export function Dashboard() {
               <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}>
                 <ArrowUpRight size={16} className="text-accent-green" aria-hidden="true" />
               </motion.div>
-              <span className="text-sm text-accent-green font-medium">Vas por buen camino</span>
+              <span className="text-sm text-accent-green font-medium">
+                Vas por buen camino
+                {activePhases.length > 0 && ` para ${activePhases.map((p) => p.name).join(', ')}`}
+                {effectiveTargetDate && ` antes de ${new Date(effectiveTargetDate).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`}
+              </span>
             </>
           ) : (
             <>
@@ -126,7 +135,7 @@ export function Dashboard() {
                 <ArrowDownRight size={16} className="text-accent-red" aria-hidden="true" />
               </motion.div>
               <span className="text-sm text-accent-red font-medium">
-                Necesitas {formatCurrency(requiredMonthly)}/mes para {phases.length > 0 ? phases.map((p) => p.name).join(', ') : 'tu objetivo'}
+                Necesitas {formatCurrency(requiredMonthly)}/mes para {activePhases.length > 0 ? activePhases.map((p) => p.name).join(', ') : 'tu objetivo'}
                 {effectiveTargetDate && ` antes de ${new Date(effectiveTargetDate).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`}
               </span>
             </>
@@ -258,8 +267,8 @@ export function Dashboard() {
         <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-5 border border-th-border card-glow" whileHover={{ y: -2 }}>
           <h4 className="text-xs text-th-muted uppercase tracking-wider mb-3">Items pagados</h4>
           <p className="font-mono text-3xl font-bold text-th-text">
-            {phases.reduce((s, p) => s + p.items.filter((i) => i.paid).length, 0)}
-            <span className="text-lg text-th-muted">/{phases.reduce((s, p) => s + p.items.length, 0)}</span>
+            {activePhases.reduce((s, p) => s + p.items.filter((i) => i.paid).length, 0)}
+            <span className="text-lg text-th-muted">/{activePhases.reduce((s, p) => s + p.items.length, 0)}</span>
           </p>
           <p className="text-xs text-th-muted mt-2">Pagado: {formatCurrency(totalPaid)}</p>
         </motion.div>

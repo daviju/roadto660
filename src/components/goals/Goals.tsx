@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
-  Target, TrendingUp, Clock, Sparkles, Crown, Lock,
+  Target, TrendingUp, TrendingDown, Clock, Sparkles, Crown, Lock,
   CheckCircle2, ChevronDown, ChevronUp, Scissors, Zap,
   Plus, Pencil, Trash2, X, Power,
 } from 'lucide-react';
@@ -290,10 +290,35 @@ export function Goals() {
     return { totalPaid, progressPct, totalTarget };
   };
 
-  // Estimated months to reach goal
+  // Estimated months to reach goal (raw float — round only for display)
+  const getEstimatedMonthsRaw = (remaining: number, savingsRate: number) => {
+    if (savingsRate <= 0 || !isFinite(savingsRate)) return Infinity;
+    if (remaining <= 0) return 0;
+    return remaining / savingsRate;
+  };
+
   const getEstimatedMonths = (remaining: number, savingsRate: number) => {
-    if (savingsRate <= 0) return Infinity;
-    return Math.ceil(remaining / savingsRate);
+    const raw = getEstimatedMonthsRaw(remaining, savingsRate);
+    return isFinite(raw) ? Math.ceil(raw) : Infinity;
+  };
+
+  // Format months as "X meses" or "X meses y Y semanas" (handles 0/1/plural)
+  const formatMonths = (months: number): string => {
+    if (!isFinite(months) || isNaN(months) || months < 0) return '--';
+    if (months === 0) return 'ya alcanzado';
+    const fullMonths = Math.floor(months);
+    const fractional = months - fullMonths;
+    const weeks = Math.round(fractional * 4);
+    const monthLabel = fullMonths === 1 ? 'mes' : 'meses';
+    if (fullMonths === 0) {
+      return weeks === 1 ? '1 semana' : `${weeks} semanas`;
+    }
+    if (weeks === 0 || weeks === 4) {
+      const total = weeks === 4 ? fullMonths + 1 : fullMonths;
+      return `${total} ${total === 1 ? 'mes' : 'meses'}`;
+    }
+    const weekLabel = weeks === 1 ? 'semana' : 'semanas';
+    return `${fullMonths} ${monthLabel} y ${weeks} ${weekLabel}`;
   };
 
   const getEstimatedDate = (months: number) => {
@@ -308,7 +333,7 @@ export function Goals() {
     if (!activeGoal) return [];
     const { totalPaid } = getGoalProgress(activeGoal);
     const remaining = Math.max(0, activeGoal.target_amount - totalPaid);
-    const baseMonths = getEstimatedMonths(remaining, monthlySavings);
+    const baseMonthsRaw = getEstimatedMonthsRaw(remaining, monthlySavings);
 
     const sorted = Object.entries(expensesByCategory)
       .sort((a, b) => b[1] - a[1])
@@ -316,69 +341,76 @@ export function Goals() {
 
     const result: Scenario[] = [];
 
+    const buildScenario = (
+      id: string,
+      label: string,
+      icon: React.ReactNode,
+      description: string,
+      cut: number,
+    ): Scenario => {
+      const newSavings = monthlySavings + cut;
+      const newMonthsRaw = getEstimatedMonthsRaw(remaining, newSavings);
+      const monthsSaved = isFinite(baseMonthsRaw) && isFinite(newMonthsRaw)
+        ? Math.max(0, baseMonthsRaw - newMonthsRaw)
+        : 0;
+      return {
+        id,
+        label,
+        icon,
+        description,
+        extraSavingsPerMonth: cut,
+        newEstimatedMonths: newMonthsRaw,
+        monthsSaved,
+      };
+    };
+
     // Scenario 1: Cut top category by 30%
     if (sorted.length > 0) {
       const [cat, amount] = sorted[0];
       const cut = amount * 0.3;
-      const newSavings = monthlySavings + cut;
-      const newMonths = getEstimatedMonths(remaining, newSavings);
-      result.push({
-        id: 'cut-top',
-        label: `Reducir ${cat} un 30%`,
-        icon: <Scissors size={16} aria-hidden="true" />,
-        description: `Ahorra ${formatCurrency(cut)}/mes recortando ${cat} de ${formatCurrency(amount)} a ${formatCurrency(amount - cut)}`,
-        extraSavingsPerMonth: cut,
-        newEstimatedMonths: newMonths,
-        monthsSaved: isFinite(baseMonths) ? baseMonths - newMonths : 0,
-      });
+      result.push(buildScenario(
+        'cut-top',
+        `Reducir ${cat} un 30%`,
+        <TrendingDown size={16} aria-hidden="true" />,
+        `Ahorra ${formatCurrency(cut)}/mes recortando ${cat} de ${formatCurrency(amount)} a ${formatCurrency(amount - cut)}`,
+        cut,
+      ));
     }
 
     // Scenario 2: Cut all categories by 10%
     const totalCut10 = Object.values(expensesByCategory).reduce((s, v) => s + v * 0.1, 0);
     if (totalCut10 > 0) {
-      const newSavings = monthlySavings + totalCut10;
-      const newMonths = getEstimatedMonths(remaining, newSavings);
-      result.push({
-        id: 'cut-all-10',
-        label: 'Reducir todo un 10%',
-        icon: <TrendingUp size={16} aria-hidden="true" />,
-        description: `Ahorra ${formatCurrency(totalCut10)}/mes aplicando un recorte del 10% en todas las categorias`,
-        extraSavingsPerMonth: totalCut10,
-        newEstimatedMonths: newMonths,
-        monthsSaved: isFinite(baseMonths) ? baseMonths - newMonths : 0,
-      });
+      result.push(buildScenario(
+        'cut-all-10',
+        'Reducir todo un 10%',
+        <TrendingDown size={16} aria-hidden="true" />,
+        `Ahorra ${formatCurrency(totalCut10)}/mes aplicando un recorte del 10% en todas las categorias`,
+        totalCut10,
+      ));
     }
 
     // Scenario 3: Cut top 2 categories by 20%
     if (sorted.length >= 2) {
       const cut = sorted.slice(0, 2).reduce((s, [, a]) => s + a * 0.2, 0);
-      const newSavings = monthlySavings + cut;
-      const newMonths = getEstimatedMonths(remaining, newSavings);
-      result.push({
-        id: 'cut-top2-20',
-        label: `Recortar las 2 mayores un 20%`,
-        icon: <Zap size={16} aria-hidden="true" />,
-        description: `Recorta ${sorted[0][0]} y ${sorted[1][0]} un 20%, ahorrando ${formatCurrency(cut)}/mes extra`,
-        extraSavingsPerMonth: cut,
-        newEstimatedMonths: newMonths,
-        monthsSaved: isFinite(baseMonths) ? baseMonths - newMonths : 0,
-      });
+      result.push(buildScenario(
+        'cut-top2-20',
+        'Recortar las 2 mayores un 20%',
+        <Scissors size={16} aria-hidden="true" />,
+        `Recorta ${sorted[0][0]} y ${sorted[1][0]} un 20%, ahorrando ${formatCurrency(cut)}/mes extra`,
+        cut,
+      ));
     }
 
     // Scenario 4: Aggressive — cut top 3 by 40%
     if (sorted.length >= 3) {
       const cut = sorted.slice(0, 3).reduce((s, [, a]) => s + a * 0.4, 0);
-      const newSavings = monthlySavings + cut;
-      const newMonths = getEstimatedMonths(remaining, newSavings);
-      result.push({
-        id: 'aggressive',
-        label: 'Modo agresivo',
-        icon: <Zap size={16} aria-hidden="true" />,
-        description: `Recorta un 40% en ${sorted[0][0]}, ${sorted[1][0]} y ${sorted[2][0]}. Extra: ${formatCurrency(cut)}/mes`,
-        extraSavingsPerMonth: cut,
-        newEstimatedMonths: newMonths,
-        monthsSaved: isFinite(baseMonths) ? baseMonths - newMonths : 0,
-      });
+      result.push(buildScenario(
+        'aggressive',
+        'Modo agresivo',
+        <Zap size={16} aria-hidden="true" />,
+        `Recorta un 40% en ${sorted[0][0]}, ${sorted[1][0]} y ${sorted[2][0]}. Extra: ${formatCurrency(cut)}/mes`,
+        cut,
+      ));
     }
 
     return result;
@@ -822,16 +854,14 @@ export function Goals() {
                       <div className="bg-th-bg rounded-lg p-2.5 text-center">
                         <p className="text-[10px] text-th-muted uppercase tracking-wider">Nuevo plazo</p>
                         <p className="font-mono text-sm font-semibold text-accent-cyan mt-0.5">
-                          {isFinite(scenario.newEstimatedMonths)
-                            ? `${scenario.newEstimatedMonths} ${scenario.newEstimatedMonths === 1 ? 'mes' : 'meses'}`
-                            : '--'}
+                          {formatMonths(scenario.newEstimatedMonths)}
                         </p>
                       </div>
                       <div className="bg-th-bg rounded-lg p-2.5 text-center">
                         <p className="text-[10px] text-th-muted uppercase tracking-wider">Te ahorras</p>
                         <p className="font-mono text-sm font-semibold text-accent-green mt-0.5">
-                          {scenario.monthsSaved > 0
-                            ? `${scenario.monthsSaved} mes${scenario.monthsSaved !== 1 ? 'es' : ''}`
+                          {scenario.monthsSaved > 0.05
+                            ? formatMonths(scenario.monthsSaved)
                             : '--'}
                         </p>
                       </div>

@@ -231,6 +231,7 @@ export interface Phase {
   items: PhaseItem[];
   color: string;
   targetAmount: number;
+  isActive: boolean;
 }
 
 export interface Motorcycle {

@@ -151,6 +151,7 @@ function buildPhase4(moto: Motorcycle): Phase {
     status: 'pending',
     color: '#a78bfa',
     targetAmount: 0,
+    isActive: true,
     items: [
       { id: 'moto-purchase', name: moto.name, estimatedCost: moto.price, paid: false, paidAmount: 0, paidDate: null },
       { id: 'moto-insurance', name: `Seguro ${moto.name} (novel)`, estimatedCost: moto.insuranceYear, paid: false, paidAmount: 0, paidDate: null },
@@ -168,6 +169,7 @@ export function getDefaultPhases(activeMoto?: Motorcycle): Phase[] {
       status: 'pending',
       color: '#22d3ee',
       targetAmount: 0,
+    isActive: true,
       items: [
         { id: 'p1-1', name: 'Practicas de conducir (24EUR x 15)', estimatedCost: 360, paid: false, paidAmount: 0, paidDate: null },
         { id: 'p1-2', name: 'Tasas DGT (teorico + practico)', estimatedCost: 93, paid: false, paidAmount: 0, paidDate: null },
@@ -181,6 +183,7 @@ export function getDefaultPhases(activeMoto?: Motorcycle): Phase[] {
       status: 'pending',
       color: '#fb923c',
       targetAmount: 0,
+    isActive: true,
       items: [
         { id: 'p2-1', name: 'Seguro coche novel', estimatedCost: 650, paid: false, paidAmount: 0, paidDate: null },
         { id: 'p2-2', name: 'Transferencia/cambio nombre', estimatedCost: 170, paid: false, paidAmount: 0, paidDate: null },
@@ -196,6 +199,7 @@ export function getDefaultPhases(activeMoto?: Motorcycle): Phase[] {
       status: 'pending',
       color: '#34d399',
       targetAmount: 0,
+    isActive: true,
       items: [
         { id: 'p3-1', name: 'Botas Alpinestars Faster 4 Drystar', estimatedCost: 210, paid: false, paidAmount: 0, paidDate: null },
         { id: 'p3-2', name: 'Casco', estimatedCost: 360, paid: false, paidAmount: 0, paidDate: null },
