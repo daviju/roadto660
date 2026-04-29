@@ -6,6 +6,7 @@ import {
   Plus, Pencil, Trash2, X, Power,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { useAppData } from '../../lib/DataProvider';
 import { supabase } from '../../lib/supabase';
 import { usePlan } from '../../hooks/usePlan';
 import { usePaywall } from '../shared/PaywallModal';
@@ -51,6 +52,8 @@ interface Scenario {
 // ─── Main component ─────────────────────────────────────────
 export function Goals() {
   const { user, profile } = useAuth();
+  const { settings } = useAppData();
+  const availableBalance = Math.max(0, settings.currentBalance - settings.emergencyFund);
   const { isPro, hasSimulatorScenarios } = usePlan();
   const paywall = usePaywall();
 
@@ -290,10 +293,11 @@ export function Goals() {
     return { totalPaid, progressPct, totalTarget };
   };
 
-  // Estimated months to reach goal (raw float — round only for display)
+  // Estimated months to reach goal (raw float — round only for display).
+  // `remaining` should already account for what the user has saved + paid.
   const getEstimatedMonthsRaw = (remaining: number, savingsRate: number) => {
+    if (remaining <= 0) return 0; // already covered by current funds
     if (savingsRate <= 0 || !isFinite(savingsRate)) return Infinity;
-    if (remaining <= 0) return 0;
     return remaining / savingsRate;
   };
 
@@ -587,9 +591,18 @@ export function Goals() {
       )}
 
       {/* Active Goals - Hero sections */}
-      {activeGoals.map((goal) => {
+      {activeGoals.map((goal, goalIdx) => {
         const { totalPaid, progressPct, totalTarget } = getGoalProgress(goal);
-        const remaining = Math.max(0, totalTarget - totalPaid);
+        // Allocate available balance to active goals in order — first goal claims first
+        const allocatedBalance = activeGoals
+          .slice(0, goalIdx)
+          .reduce((acc, g) => {
+            const p = getGoalProgress(g);
+            return acc + Math.max(0, p.totalTarget - p.totalPaid);
+          }, 0);
+        const balanceLeftForThisGoal = Math.max(0, availableBalance - allocatedBalance);
+        const remaining = Math.max(0, totalTarget - totalPaid - balanceLeftForThisGoal);
+        const noSavings = monthlySavings <= 0 && remaining > 0;
         const estimatedMonths = getEstimatedMonths(remaining, monthlySavings);
         const estimatedDate = getEstimatedDate(estimatedMonths);
 
@@ -685,18 +698,27 @@ export function Goals() {
               <motion.div variants={fadeUpSmall} className="bg-th-bg rounded-xl p-3 text-center">
                 <p className="text-[10px] text-th-muted uppercase tracking-wider mb-1">Meses restantes</p>
                 <p className="font-mono text-sm font-semibold text-accent-cyan">
-                  {isFinite(estimatedMonths) ? estimatedMonths : '--'}
+                  {remaining <= 0 ? '0' : noSavings ? '--' : isFinite(estimatedMonths) ? estimatedMonths : '--'}
                 </p>
               </motion.div>
               <motion.div variants={fadeUpSmall} className="bg-th-bg rounded-xl p-3 text-center">
                 <p className="text-[10px] text-th-muted uppercase tracking-wider mb-1">Fecha estimada</p>
                 <p className="font-mono text-sm font-semibold text-accent-amber">
-                  {estimatedDate
-                    ? estimatedDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
-                    : '--'}
+                  {remaining <= 0
+                    ? 'Ya tienes suficiente'
+                    : noSavings
+                      ? '--'
+                      : estimatedDate
+                        ? estimatedDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
+                        : '--'}
                 </p>
               </motion.div>
             </motion.div>
+            {noSavings && (
+              <p className="mt-3 text-xs text-th-muted text-center">
+                Sin ahorro mensual no es posible estimar la fecha. Revisa tus gastos o ingresos.
+              </p>
+            )}
 
             {/* Target date comparison */}
             {goal.target_date && estimatedDate && (

@@ -15,6 +15,18 @@ export function Timeline() {
     addPhaseItem, removePhaseItem, updatePhase, addPhase, removePhase,
   } = useAppData();
 
+  // Sort: active first (by closest target date), then inactive (by closest target date)
+  const sortByDate = (a: typeof phases[0], b: typeof phases[0]) => {
+    if (!a.targetDate && !b.targetDate) return 0;
+    if (!a.targetDate) return 1;
+    if (!b.targetDate) return -1;
+    return a.targetDate.localeCompare(b.targetDate);
+  };
+  const activeSorted = phases.filter((p) => p.isActive).sort(sortByDate);
+  const inactiveSorted = phases.filter((p) => !p.isActive).sort(sortByDate);
+  const sortedPhases = [...activeSorted, ...inactiveSorted];
+  const firstInactiveIdx = activeSorted.length;
+
   const [expandedPhase, setExpandedPhase] = useState<string | null>(phases[0]?.id ?? null);
   const [editingItem, setEditingItem] = useState<EditItemState | null>(null);
   const [editingPhase, setEditingPhase] = useState<EditPhaseState | null>(null);
@@ -170,7 +182,7 @@ export function Timeline() {
             initial={{ scaleY: 0, originY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} />
 
           <div className="space-y-4">
-            {phases.map((phase, phaseIndex) => {
+            {sortedPhases.map((phase, phaseIndex) => {
               const total = getPhaseTotal(phase);
               const paid = getPhasePaid(phase);
               const pct = total > 0 ? paid / total : 0;
@@ -178,20 +190,32 @@ export function Timeline() {
               const isExpanded = expandedPhase === phase.id;
               const paidItems = phase.items.filter((i) => i.paid).length;
               const isEditingThisPhase = editingPhase?.phaseId === phase.id;
+              const isInactive = !phase.isActive;
+              const showInactiveSeparator = phaseIndex === firstInactiveIdx && firstInactiveIdx > 0;
 
               return (
-                <motion.div key={phase.id} className="relative pl-10 md:pl-14"
-                  initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: phaseIndex * 0.12, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
-                  <motion.div
-                    className={`absolute left-1.5 md:left-3.5 w-5 h-5 rounded-full border-2 flex items-center justify-center z-10 ${phase.status === 'in-progress' ? 'pulse-ring' : ''}`}
-                    style={{ borderColor: phase.color, backgroundColor: phase.status === 'completed' ? phase.color : 'var(--bg-main)', color: phase.color }}
-                    initial={{ scale: 0 }} animate={{ scale: 1 }}
-                    transition={{ delay: phaseIndex * 0.12 + 0.2, type: 'spring', stiffness: 400, damping: 15 }}>
-                    {phase.status === 'completed' && <Check size={10} className="text-white" />}
-                  </motion.div>
+                <div key={phase.id}>
+                  {showInactiveSeparator && (
+                    <div className="relative pl-10 md:pl-14 my-4 flex items-center gap-3">
+                      <div className="flex-1 h-px bg-th-border" />
+                      <span className="text-[10px] uppercase tracking-wider text-th-muted font-semibold">Metas desactivadas</span>
+                      <div className="flex-1 h-px bg-th-border" />
+                    </div>
+                  )}
+                  <motion.div className={`relative pl-10 md:pl-14 ${isInactive ? 'opacity-50' : ''}`}
+                    initial={{ opacity: 0, x: -30 }} animate={{ opacity: isInactive ? 0.5 : 1, x: 0 }}
+                    transition={{ delay: phaseIndex * 0.12, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
+                    <motion.div
+                      className={`absolute left-1.5 md:left-3.5 w-5 h-5 rounded-full border-2 flex items-center justify-center z-10 ${phase.status === 'in-progress' && !isInactive ? 'pulse-ring' : ''}`}
+                      style={{ borderColor: phase.color, backgroundColor: phase.status === 'completed' ? phase.color : 'var(--bg-main)', color: phase.color }}
+                      initial={{ scale: 0 }} animate={{ scale: 1 }}
+                      transition={{ delay: phaseIndex * 0.12 + 0.2, type: 'spring', stiffness: 400, damping: 15 }}>
+                      {phase.status === 'completed' && <Check size={10} className="text-white" />}
+                    </motion.div>
 
-                  <motion.div className="bg-th-card rounded-xl border border-th-border overflow-hidden card-glow" whileHover={{ y: -1 }}>
+                    <motion.div className={`bg-th-card rounded-xl border overflow-hidden card-glow ${
+                      isInactive ? 'border-th-border' : 'border-accent-purple/30'
+                    }`} whileHover={{ y: -1 }}>
                     {/* Phase header */}
                     {isEditingThisPhase ? (
                       <div className="p-4 space-y-2">
@@ -226,6 +250,13 @@ export function Timeline() {
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="text-sm font-semibold text-th-text truncate">{phase.name}</h3>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                  isInactive
+                                    ? 'bg-th-hover text-th-muted'
+                                    : 'bg-accent-purple/15 text-accent-purple'
+                                }`}>
+                                  {isInactive ? 'Desactivada' : 'Activa'}
+                                </span>
                                 <motion.button onClick={(e) => { e.stopPropagation(); updatePhaseStatus(phase.id, nextStatus(phase.status)); }}
                                   className={`text-[10px] md:text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                                     phase.status === 'completed' ? 'bg-accent-green/10 text-accent-green' :
@@ -370,7 +401,8 @@ export function Timeline() {
                       )}
                     </AnimatePresence>
                   </motion.div>
-                </motion.div>
+                  </motion.div>
+                </div>
               );
             })}
           </div>

@@ -6,7 +6,7 @@ import { useAppData } from '../../lib/DataProvider';
 import { usePlan } from '../../hooks/usePlan';
 import { usePaywall } from '../shared/PaywallModal';
 import { formatCurrency, getCurrentMonth, formatMonth } from '../../utils/format';
-import { getAvailableBalance, getTotalObjective, getTotalPaid, getExpensesByCategory, getMonthTotalExpenses, getMonthTotalIncome, projectSavingsTimeline } from '../../utils/calculations';
+import { getAvailableBalance, getTotalObjective, getTotalPaid, getExpensesByCategory, getMonthTotalExpenses, getMonthTotalIncome } from '../../utils/calculations';
 import { staggerContainer, fadeUp } from '../../utils/animations';
 
 function EmptyChart({ message, sub }: { message: string; sub?: string }) {
@@ -28,7 +28,7 @@ const tooltipStyle = {
 };
 
 export function Charts() {
-  const { settings, phases, expenses, incomes } = useAppData();
+  const { settings, phases, expenses, incomes, categories: dbCategories } = useAppData();
   const { hasAdvancedCharts } = usePlan();
   const paywall = usePaywall();
   const currentMonth = getCurrentMonth(settings.payDay, settings.cycleMode);
@@ -64,9 +64,22 @@ export function Charts() {
     return getExpensesByCategory(expenses, filterMonth, settings.payDay, settings.cycleMode);
   }, [expenses, filterMonth, isGlobal, settings.payDay, settings.cycleMode]);
 
+  const catColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    dbCategories.forEach((c) => m.set(c.name, c.color));
+    return m;
+  }, [dbCategories]);
+
   const pieData = useMemo(() =>
-    Object.entries(byCategory).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
-    [byCategory]
+    Object.entries(byCategory)
+      .filter(([, v]) => v > 0)
+      .map(([name, value], i) => ({
+        name,
+        value,
+        color: catColorMap.get(name) || COLORS[i % COLORS.length],
+      }))
+      .sort((a, b) => b.value - a.value),
+    [byCategory, catColorMap]
   );
   const barData = useMemo(() => pieData.map((d) => ({ ...d })), [pieData]);
 
@@ -86,11 +99,47 @@ export function Charts() {
 
   const currentMonthExpenses = getMonthTotalExpenses(expenses, currentMonth, settings.payDay, settings.cycleMode);
   const estimatedMonthlySavings = totalMonthlyIncome - (currentMonthExpenses > 0 ? currentMonthExpenses : 507);
-  const projectionData = useMemo(() =>
-    projectSavingsTimeline(settings.currentBalance, settings.emergencyFund, estimatedMonthlySavings, totalObjective, totalPaid, settings.targetDate)
-      .map((p) => ({ ...p, month: formatMonth(p.month + '-01'), objetivo: totalObjective - totalPaid })),
-    [settings, totalObjective, totalPaid, estimatedMonthlySavings]
-  );
+
+  // ─── Multi-goal projection: cumulative goal thresholds + savings line ─
+  const activePhases = useMemo(() => phases.filter((p) => p.isActive), [phases]);
+
+  // Cumulative thresholds: goal i threshold = sum of (target - paid) of goals 0..i
+  const cumulativeGoals = useMemo(() => {
+    let acc = 0;
+    return activePhases.map((p) => {
+      const itemSum = p.items.reduce((s, it) => s + it.estimatedCost, 0);
+      const target = p.targetAmount > 0 ? Math.max(p.targetAmount, itemSum) : itemSum;
+      const paid = p.items.reduce((s, it) => s + (it.paid ? it.paidAmount : 0), 0);
+      const remainingForGoal = Math.max(0, target - paid);
+      acc += remainingForGoal;
+      return { name: p.name, threshold: acc };
+    });
+  }, [activePhases]);
+
+  // Build month-by-month savings projection (24 months out)
+  const projectionData = useMemo(() => {
+    const months = 24;
+    const data: Record<string, number | string>[] = [];
+    const startBal = available;
+    for (let i = 0; i <= months; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() + i);
+      const label = d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
+      const point: Record<string, number | string> = {
+        month: label,
+        ahorro: Math.max(0, startBal + estimatedMonthlySavings * i),
+      };
+      // Add each goal threshold as a flat horizontal line
+      cumulativeGoals.forEach((g, idx) => {
+        point[`meta_${idx}`] = g.threshold;
+      });
+      data.push(point);
+    }
+    return data;
+  }, [available, estimatedMonthlySavings, cumulativeGoals]);
+
+  // Distinct color palette for goal lines
+  const GOAL_COLORS = ['#22d3ee', '#fbbf24', '#f87171', '#34d399', '#fb923c', '#f472b6'];
 
   const requiredMonthly = (() => {
     const remaining = totalObjective - totalPaid - available;
@@ -129,30 +178,69 @@ export function Charts() {
       </motion.div>
 
       <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow relative overflow-hidden">
-        <h3 className="text-sm font-semibold text-th-text mb-4">Proyeccion de ahorro vs objetivo</h3>
-        {totalObjective <= 0 || projectionData.length === 0 ? (
-          <EmptyChart message="Sin datos de proyeccion" sub="Crea fases con items en el Timeline para ver la proyeccion" />
+        <h3 className="text-sm font-semibold text-th-text mb-4">Proyeccion de ahorro vs metas</h3>
+        {cumulativeGoals.length === 0 ? (
+          <EmptyChart message="Sin metas activas" sub="Activa al menos una meta para ver la proyeccion" />
         ) : (
           <div className={hasAdvancedCharts ? '' : 'blur-sm pointer-events-none select-none'}>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={projectionData}>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={projectionData} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} width={40} />
+                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} width={45} />
                 <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
                 <Legend wrapperStyle={{ fontSize: '11px', color: '#f1f5f9' }} />
-                <Line type="monotone" dataKey="projected" name="Proyectado" stroke="#a78bfa" strokeWidth={2} dot={false} animationDuration={1500} />
-                <Line type="monotone" dataKey="required" name="Necesario" stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 5" dot={false} animationDuration={1500} />
-                <Line type="monotone" dataKey="objetivo" name="Objetivo" stroke="#f87171" strokeWidth={1} strokeDasharray="3 3" dot={false} animationDuration={1500} />
+                <Line
+                  type="monotone"
+                  dataKey="ahorro"
+                  name="Tu ahorro"
+                  stroke="#34d399"
+                  strokeWidth={2.5}
+                  dot={false}
+                  animationDuration={1500}
+                />
+                {cumulativeGoals.map((g, idx) => (
+                  <Line
+                    key={g.name}
+                    type="monotone"
+                    dataKey={`meta_${idx}`}
+                    name={g.name}
+                    stroke={GOAL_COLORS[idx % GOAL_COLORS.length]}
+                    strokeWidth={1.5}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    animationDuration={1200}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
-            <p className="text-xs text-th-muted mt-2">
-              A tu ritmo ({formatCurrency(estimatedMonthlySavings)}/mes),{' '}
-              {estimatedMonthlySavings >= requiredMonthly ? 'llegaras a tiempo.' : `necesitas ${formatCurrency(requiredMonthly)}/mes.`}
-            </p>
+            <div className="text-xs text-th-muted mt-3 space-y-1">
+              {cumulativeGoals.map((g, idx) => {
+                if (estimatedMonthlySavings <= 0) {
+                  return (
+                    <div key={g.name} className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GOAL_COLORS[idx % GOAL_COLORS.length] }} />
+                      <span>{g.name}: sin ahorro mensual no se puede estimar</span>
+                    </div>
+                  );
+                }
+                const monthsToReach = Math.max(0, Math.ceil((g.threshold - available) / estimatedMonthlySavings));
+                const date = new Date();
+                date.setMonth(date.getMonth() + monthsToReach);
+                const dateLabel = monthsToReach === 0
+                  ? 'ya alcanzado'
+                  : date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+                return (
+                  <div key={g.name} className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GOAL_COLORS[idx % GOAL_COLORS.length] }} />
+                    <span>{g.name}: {dateLabel} ({formatCurrency(g.threshold)})</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
-        {totalObjective > 0 && projectionData.length > 0 && !hasAdvancedCharts && (
+        {cumulativeGoals.length > 0 && !hasAdvancedCharts && (
           <button onClick={() => paywall.open('Graficos avanzados')}
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-th-card/60">
             <Lock size={24} className="text-accent-purple" />
@@ -168,13 +256,13 @@ export function Charts() {
           </h3>
           {barData.length > 0 ? (
             <ResponsiveContainer width="100%" height={Math.max(300, barData.length * 35)}>
-              <BarChart data={barData} layout="vertical">
+              <BarChart data={barData} layout="vertical" margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
                 <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 12 }} width={120} interval={0} tickFormatter={(v: string) => v.length > 15 ? v.slice(0, 15) + '…' : v} />
                 <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
                 <Bar dataKey="value" name="Gasto" radius={[0, 4, 4, 0]} animationDuration={1200}>
-                  {barData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  {barData.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -186,15 +274,40 @@ export function Charts() {
             Distribucion {isGlobal ? '(acumulado)' : ''}
           </h3>
           {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value" animationDuration={1200}>
-                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-                <Legend wrapperStyle={{ fontSize: '10px', color: '#f1f5f9' }} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="space-y-4">
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={95}
+                    paddingAngle={2}
+                    dataKey="value"
+                    animationDuration={1200}
+                    stroke="none"
+                  >
+                    {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Custom legend with category color, name and amount — avoids label overlap */}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 max-h-32 overflow-y-auto pr-1">
+                {pieData.map((d) => {
+                  const total = pieData.reduce((s, x) => s + x.value, 0);
+                  const pct = total > 0 ? (d.value / total) * 100 : 0;
+                  return (
+                    <div key={d.name} className="flex items-center gap-2 text-[11px] min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
+                      <span className="text-th-secondary truncate flex-1">{d.name}</span>
+                      <span className="font-mono text-th-text flex-shrink-0">{pct.toFixed(0)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           ) : <EmptyChart message="Sin gastos en este periodo" sub="Anade gastos para ver la distribucion" />}
         </motion.div>
       </motion.div>

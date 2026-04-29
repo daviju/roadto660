@@ -85,7 +85,7 @@ function PasswordChecklist({ password, email }: { password: string; email: strin
           />
         ))}
       </div>
-      <p className="text-[11px] text-th-muted">{STRENGTH_LABELS[strength]}</p>
+      <p className="text-[11px] text-[#64748b]">{STRENGTH_LABELS[strength]}</p>
 
       {/* Requirement items */}
       <div className="grid grid-cols-2 gap-x-2 gap-y-1">
@@ -94,9 +94,9 @@ function PasswordChecklist({ password, email }: { password: string; email: strin
             {item.ok ? (
               <Check size={10} className="text-green-400 flex-shrink-0" />
             ) : (
-              <X size={10} className="text-th-muted flex-shrink-0" />
+              <X size={10} className="text-[#64748b] flex-shrink-0" />
             )}
-            <span className={item.ok ? 'text-green-400 line-through' : 'text-th-muted'}>{item.label}</span>
+            <span className={item.ok ? 'text-green-400 line-through' : 'text-[#64748b]'}>{item.label}</span>
           </div>
         ))}
       </div>
@@ -219,25 +219,33 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-th-bg flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#050507] text-[#f1f5f9] flex items-center justify-center p-4 relative overflow-hidden font-sans antialiased">
+      {/* Subtle radial glow matching landing hero */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(ellipse at center, rgba(167,139,250,0.08) 0%, rgba(34,211,238,0.03) 35%, transparent 70%)',
+        }}
+      />
       <FinancialBackground />
 
       <motion.div
         className="w-full max-w-md relative z-10"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
       >
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-3">
             <Logo size="lg" />
           </div>
-          <p className="text-th-muted text-sm">Tus metas financieras, a tu ritmo</p>
+          <p className="text-[#94a3b8] text-sm">Tus metas financieras, a tu ritmo</p>
         </div>
 
         {/* Card */}
-        <div className="bg-th-card/80 backdrop-blur-md border border-th-border rounded-2xl p-6 space-y-5">
+        <div className="bg-[#0a0a0f]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-5 shadow-[0_30px_80px_-20px_rgba(167,139,250,0.25)]">
           {/* Google button */}
           <motion.button
             onClick={signInWithGoogle}
@@ -251,25 +259,25 @@ export function LoginPage() {
 
           {/* Divider */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-th-border" />
-            <span className="text-th-muted text-xs">o con email</span>
-            <div className="flex-1 h-px bg-th-border" />
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-[#64748b] text-xs">o con email</span>
+            <div className="flex-1 h-px bg-white/10" />
           </div>
 
           {/* Mode tabs */}
-          <div className="flex bg-th-hover rounded-xl p-1">
+          <div className="flex bg-white/[0.04] rounded-xl p-1 border border-white/5">
             {(['login', 'register'] as Mode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => switchMode(m)}
-                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all relative ${
-                  mode === m ? 'text-th-text' : 'text-th-muted hover:text-th-secondary'
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors duration-200 relative ${
+                  mode === m ? 'text-[#f1f5f9]' : 'text-[#64748b] hover:text-[#94a3b8]'
                 }`}
               >
                 {mode === m && (
                   <motion.div
                     layoutId="auth-tab"
-                    className="absolute inset-0 bg-th-card rounded-lg shadow-sm"
+                    className="absolute inset-0 bg-white/[0.06] border border-white/10 rounded-lg"
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   />
                 )}
@@ -295,9 +303,9 @@ export function LoginPage() {
                 {/* Name (register only) */}
                 {mode === 'register' && (
                   <div>
-                    <label htmlFor="name" className="block text-sm text-th-secondary mb-1.5">Nombre</label>
+                    <label htmlFor="name" className="block text-sm text-[#94a3b8] mb-1.5">Nombre</label>
                     <div className="relative">
-                      <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-th-muted" />
+                      <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
                       <input
                         ref={!nameValidation.valid ? firstErrorRef : undefined}
                         id="name"
@@ -305,10 +313,10 @@ export function LoginPage() {
                         value={name}
                         onChange={(e) => { setName(e.target.value); if (touched.name) touch('name'); }}
                         onBlur={() => touch('name')}
-                        className={`w-full pl-10 pr-4 py-2.5 bg-th-input border rounded-xl text-th-text text-sm focus:ring-1 transition-colors ${
+                        className={`w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border rounded-xl text-[#f1f5f9] text-sm focus:ring-1 transition-colors duration-200 ${
                           touched.name && !nameValidation.valid
                             ? 'border-red-500 focus:border-red-500 focus:ring-red-500/30'
-                            : 'border-th-border focus:border-accent-purple focus:ring-accent-purple/30'
+                            : 'border-white/10 focus:border-[#a78bfa] focus:ring-[#a78bfa]/30'
                         }`}
                         placeholder="Tu nombre"
                         maxLength={100}
@@ -326,9 +334,9 @@ export function LoginPage() {
 
                 {/* Email */}
                 <div>
-                  <label htmlFor="email" className="block text-sm text-th-secondary mb-1.5">Email</label>
+                  <label htmlFor="email" className="block text-sm text-[#94a3b8] mb-1.5">Email</label>
                   <div className="relative">
-                    <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-th-muted" />
+                    <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
                     <input
                       ref={!emailValidation.valid ? firstErrorRef : undefined}
                       id="email"
@@ -336,10 +344,10 @@ export function LoginPage() {
                       value={email}
                       onChange={(e) => { setEmail(e.target.value); if (touched.email) touch('email'); }}
                       onBlur={() => touch('email')}
-                      className={`w-full pl-10 pr-10 py-2.5 bg-th-input border rounded-xl text-th-text text-sm focus:ring-1 transition-colors ${
+                      className={`w-full pl-10 pr-10 py-2.5 bg-white/[0.03] border rounded-xl text-[#f1f5f9] text-sm focus:ring-1 transition-colors duration-200 ${
                         touched.email && !emailValidation.valid
                           ? 'border-red-500 focus:border-red-500 focus:ring-red-500/30'
-                          : 'border-th-border focus:border-accent-purple focus:ring-accent-purple/30'
+                          : 'border-white/10 focus:border-[#a78bfa] focus:ring-[#a78bfa]/30'
                       }`}
                       placeholder="tu@email.com"
                       maxLength={100}
@@ -360,29 +368,29 @@ export function LoginPage() {
                 {/* Password */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label htmlFor="password" className="text-sm text-th-secondary">Contrasena</label>
+                    <label htmlFor="password" className="text-sm text-[#94a3b8]">Contrasena</label>
                     {mode === 'login' && (
                       <button
                         type="button"
                         onClick={handleMagicLink}
-                        className="text-xs text-accent-purple hover:underline"
+                        className="text-xs text-[#a78bfa] hover:underline transition-colors duration-200"
                       >
                         Olvide mi contrasena
                       </button>
                     )}
                   </div>
                   <div className="relative">
-                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-th-muted" />
+                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
                     <input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); if (touched.password) touch('password'); }}
                       onBlur={() => touch('password')}
-                      className={`w-full pl-10 pr-10 py-2.5 bg-th-input border rounded-xl text-th-text text-sm focus:ring-1 transition-colors ${
+                      className={`w-full pl-10 pr-10 py-2.5 bg-white/[0.03] border rounded-xl text-[#f1f5f9] text-sm focus:ring-1 transition-colors duration-200 ${
                         touched.password && !passwordValidation.valid
                           ? 'border-red-500 focus:border-red-500 focus:ring-red-500/30'
-                          : 'border-th-border focus:border-accent-purple focus:ring-accent-purple/30'
+                          : 'border-white/10 focus:border-[#a78bfa] focus:ring-[#a78bfa]/30'
                       }`}
                       placeholder="••••••••"
                       maxLength={72}
@@ -391,7 +399,7 @@ export function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-th-muted hover:text-th-text transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b] hover:text-[#f1f5f9] transition-colors duration-200"
                       aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
                       tabIndex={-1}
                     >
@@ -411,19 +419,19 @@ export function LoginPage() {
                 {/* Confirm Password (register only) */}
                 {mode === 'register' && (
                   <div>
-                    <label htmlFor="confirmPassword" className="block text-sm text-th-secondary mb-1.5">Confirmar contrasena</label>
+                    <label htmlFor="confirmPassword" className="block text-sm text-[#94a3b8] mb-1.5">Confirmar contrasena</label>
                     <div className="relative">
-                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-th-muted" />
+                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
                       <input
                         id="confirmPassword"
                         type={showConfirm ? 'text' : 'password'}
                         value={confirmPassword}
                         onChange={(e) => { setConfirmPassword(e.target.value); if (touched.confirmPassword) touch('confirmPassword'); }}
                         onBlur={() => touch('confirmPassword')}
-                        className={`w-full pl-10 pr-10 py-2.5 bg-th-input border rounded-xl text-th-text text-sm focus:ring-1 transition-colors ${
+                        className={`w-full pl-10 pr-10 py-2.5 bg-white/[0.03] border rounded-xl text-[#f1f5f9] text-sm focus:ring-1 transition-colors duration-200 ${
                           touched.confirmPassword && !confirmValidation.valid
                             ? 'border-red-500 focus:border-red-500 focus:ring-red-500/30'
-                            : 'border-th-border focus:border-accent-purple focus:ring-accent-purple/30'
+                            : 'border-white/10 focus:border-[#a78bfa] focus:ring-[#a78bfa]/30'
                         }`}
                         placeholder="••••••••"
                         maxLength={72}
@@ -432,7 +440,7 @@ export function LoginPage() {
                       <button
                         type="button"
                         onClick={() => setShowConfirm(!showConfirm)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-th-muted hover:text-th-text transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b] hover:text-[#f1f5f9] transition-colors duration-200"
                         aria-label={showConfirm ? 'Ocultar contrasena' : 'Mostrar contrasena'}
                         tabIndex={-1}
                       >
@@ -456,7 +464,7 @@ export function LoginPage() {
                       onChange={(e) => setPrivacyAccepted(e.target.checked)}
                       className="mt-1 w-4 h-4 rounded border-th-border text-accent-purple focus:ring-accent-purple/30 bg-th-input"
                     />
-                    <span className="text-xs text-th-muted leading-relaxed">
+                    <span className="text-xs text-[#64748b] leading-relaxed">
                       He leido y acepto la{' '}
                       <button
                         type="button"
@@ -487,8 +495,11 @@ export function LoginPage() {
                 <motion.button
                   type="submit"
                   disabled={loading || (mode === 'register' ? !canSubmitRegister : !canSubmitLogin)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-accent-purple text-white font-medium rounded-xl hover:bg-accent-purple/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  {...buttonTap}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 text-white font-semibold rounded-xl shadow-[0_8px_30px_rgba(167,139,250,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)' }}
                 >
                   {loading ? (
                     <Loader2 size={20} className="animate-spin" />
@@ -509,7 +520,7 @@ export function LoginPage() {
               <button
                 onClick={handleMagicLink}
                 disabled={loading}
-                className="text-th-muted hover:text-th-text text-xs"
+                className="text-[#64748b] hover:text-[#f1f5f9] text-xs transition-colors duration-200"
               >
                 Enviar enlace de acceso por email
               </button>
@@ -517,7 +528,7 @@ export function LoginPage() {
           </div>
         </div>
 
-        <p className="text-th-faint text-xs text-center mt-6">
+        <p className="text-[#64748b] text-xs text-center mt-6">
           Pago seguro con Stripe &middot; Tus datos estan protegidos
         </p>
       </motion.div>

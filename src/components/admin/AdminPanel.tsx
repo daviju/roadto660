@@ -623,7 +623,9 @@ export function AdminPanel() {
                           <div className="bg-th-bg rounded-lg p-2.5 text-center">
                             <p className="text-[10px] text-th-muted uppercase tracking-wider">Racha</p>
                             <p className="font-mono text-xs text-accent-amber mt-0.5">
-                              {userProfile.streak_days} dias
+                              {userProfile.streak_days && userProfile.streak_days > 0
+                                ? `${userProfile.streak_days} dias 🔥`
+                                : '0 dias'}
                             </p>
                           </div>
                           <div className="bg-th-bg rounded-lg p-2.5 text-center">

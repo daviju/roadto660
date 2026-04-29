@@ -323,12 +323,12 @@ function ProductSection() {
   const step2Ref = useRef<HTMLDivElement>(null);
   const step3Ref = useRef<HTMLDivElement>(null);
 
-  const inView1 = useInView(step1Ref, { margin: '-50% 0px -45% 0px' });
-  const inView2 = useInView(step2Ref, { margin: '-50% 0px -45% 0px' });
-  const inView3 = useInView(step3Ref, { margin: '-50% 0px -45% 0px' });
+  const inView1 = useInView(step1Ref, { margin: '-45% 0px -45% 0px', amount: 'some' });
+  const inView2 = useInView(step2Ref, { margin: '-45% 0px -45% 0px', amount: 'some' });
+  const inView3 = useInView(step3Ref, { margin: '-45% 0px -45% 0px', amount: 'some' });
 
-  // Fallback for the very first step
-  const activeIndex = inView3 ? 2 : inView2 ? 1 : inView1 ? 0 : 0;
+  // Active step (later ones win)
+  const activeIndex = inView3 ? 2 : inView2 ? 1 : 0;
 
   return (
     <section ref={sectionRef} className="relative py-32 md:py-40 px-6">
@@ -351,27 +351,30 @@ function ProductSection() {
           </p>
         </motion.div>
 
-        {/* Desktop: sticky mockup + scroll steps */}
-        <div className="hidden lg:grid grid-cols-2 gap-16 items-start">
-          <div className="sticky top-32 self-start">
-            <MockupFrame>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeIndex}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {activeIndex === 0 && <MockupImport active={inView1} />}
-                  {activeIndex === 1 && <MockupGoal active={inView2} />}
-                  {activeIndex === 2 && <MockupProjection active={inView3} />}
-                </motion.div>
-              </AnimatePresence>
-            </MockupFrame>
+        {/* Desktop: sticky mockup + scroll steps. Two columns of equal natural height. */}
+        <div className="hidden lg:grid grid-cols-2 gap-16">
+          {/* Sticky column — mockup centered vertically while user scrolls steps */}
+          <div className="relative">
+            <div className="sticky top-1/2 -translate-y-1/2">
+              <MockupFrame>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeIndex}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                  >
+                    {activeIndex === 0 && <MockupImport active={inView1} />}
+                    {activeIndex === 1 && <MockupGoal active={inView2} />}
+                    {activeIndex === 2 && <MockupProjection active={inView3} />}
+                  </motion.div>
+                </AnimatePresence>
+              </MockupFrame>
+            </div>
           </div>
 
-          <div className="space-y-48">
+          <div className="space-y-[60vh] py-[20vh]">
             {STEPS.map((s, i) => {
               const ref = [step1Ref, step2Ref, step3Ref][i];
               const isActive = [inView1, inView2, inView3][i];
@@ -379,15 +382,15 @@ function ProductSection() {
                 <motion.div
                   key={s.title}
                   ref={ref}
-                  initial={{ opacity: 0, y: 40 }}
+                  initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: false, margin: '-30%' }}
-                  transition={{ duration: 0.6 }}
+                  viewport={{ once: true, margin: '-30%' }}
+                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                   className="space-y-4"
                 >
                   <motion.span
-                    animate={isActive ? { scale: 1, opacity: 1 } : { scale: 0.9, opacity: 0.5 }}
-                    transition={{ duration: 0.3 }}
+                    animate={isActive ? { scale: 1, opacity: 1 } : { scale: 0.92, opacity: 0.5 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/30"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />
@@ -481,32 +484,23 @@ export function LandingPage({ onLogin }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#050507] text-[#f1f5f9] overflow-x-hidden font-sans antialiased">
+    <div className="min-h-screen bg-[#050507] text-[#f1f5f9] font-sans antialiased">
       <CustomCursor />
 
-      {/* @property for animated angle on PRO card border */}
       <style>{`
-        @property --angle {
-          syntax: '<angle>';
-          initial-value: 0deg;
-          inherits: false;
-        }
-        @keyframes rotate-angle {
-          to { --angle: 360deg; }
-        }
-        .pro-glow::before {
-          content: '';
-          position: absolute;
-          inset: -2px;
-          z-index: -1;
-          border-radius: 1.5rem;
-          background: conic-gradient(from var(--angle), #a78bfa, #22d3ee, #a78bfa);
-          animation: rotate-angle 4s linear infinite;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .pro-glow::before { animation: none; background: linear-gradient(135deg, #a78bfa, #22d3ee); }
-        }
         html { scroll-behavior: smooth; }
+        .pro-card {
+          border: 1px solid rgba(167, 139, 250, 0.25);
+          box-shadow: 0 0 0 rgba(167, 139, 250, 0);
+          transition: border-color 300ms ease-out, box-shadow 300ms ease-out, transform 300ms ease-out;
+        }
+        .pro-card:hover {
+          border-color: rgba(167, 139, 250, 0.55);
+          box-shadow: 0 0 40px rgba(167, 139, 250, 0.18);
+        }
+        .feature-card {
+          transition: transform 200ms ease-out, border-color 200ms ease-out, box-shadow 200ms ease-out;
+        }
       `}</style>
 
       {/* ─── Fixed Navbar ─────────────────────────────────────── */}
@@ -759,9 +753,9 @@ export function LandingPage({ onLogin }: Props) {
                 initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-50px' }}
-                transition={{ duration: 0.5, delay: i * 0.08 }}
+                transition={{ duration: 0.5, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
                 whileHover={{ y: -4 }}
-                className="group relative p-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] transition-all duration-300 hover:border-[#a78bfa]/30 hover:shadow-[0_0_40px_-10px_rgba(167,139,250,0.4)]"
+                className="feature-card relative p-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-[#a78bfa]/40 hover:shadow-[0_0_40px_-10px_rgba(167,139,250,0.4)]"
               >
                 <div
                   className="w-11 h-11 rounded-xl flex items-center justify-center mb-4 text-white"
@@ -851,8 +845,8 @@ export function LandingPage({ onLogin }: Props) {
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true, margin: '-100px' }}
               transition={{ duration: 0.6, type: 'spring', stiffness: 80, damping: 18, delay: 0.1 }}
-              whileHover={{ y: -3 }}
-              className="pro-glow relative rounded-3xl bg-[#0a0a0f] p-8"
+              whileHover={{ y: -2, scale: 1.02 }}
+              className="pro-card relative rounded-3xl bg-[#0a0a0f] p-8"
             >
               <div className="flex items-center justify-between mb-2">
                 <span
@@ -969,7 +963,7 @@ function FinalHeading() {
 
 function HowItWorksSection() {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: '-100px' });
+  const inView = useInView(ref, { once: true, amount: 0.3, margin: '0px 0px -10% 0px' });
 
   const steps = [
     { icon: <FileSpreadsheet size={20} />, title: 'Sube tu extracto', badge: '30 seg' },
@@ -1028,13 +1022,14 @@ function HowItWorksSection() {
               <div key={s.title} className="relative flex flex-col items-center text-center">
                 {/* Icon — solid bg so line doesn't show through */}
                 <motion.div
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={inView ? { scale: [0, 1.2, 1], opacity: 1 } : { scale: 0, opacity: 0 }}
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={inView ? { scale: 1, opacity: 1 } : { scale: 0.6, opacity: 0 }}
                   transition={{
-                    duration: 0.6,
-                    delay: 0.4 + i * 0.6, // sync with line drawing (~2s total)
-                    times: [0, 0.6, 1],
-                    ease: 'easeOut',
+                    duration: 0.5,
+                    delay: 0.4 + i * 0.6,
+                    type: 'spring',
+                    stiffness: 220,
+                    damping: 18,
                   }}
                   className="relative w-16 h-16 rounded-full flex items-center justify-center bg-[#050507] border-2 border-[#a78bfa]/40 text-[#a78bfa]"
                   style={{ zIndex: 2, boxShadow: '0 0 0 6px #050507, 0 0 30px rgba(167,139,250,0.3)' }}

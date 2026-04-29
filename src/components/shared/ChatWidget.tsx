@@ -34,6 +34,8 @@ interface FinData {
 
 const SUGGESTIONS = [
   'Resumen del mes',
+  'Dame un consejo',
+  'Media de gastos ultimos 3 meses',
   'Cuando compro mi meta?',
   'Donde gasto mas?',
   'Que pasa si recorto?',
@@ -432,47 +434,151 @@ function affordability(input: string, data: FinData): Resp {
   return { text: `Gastar ${formatCurrency(amount)} te dejaria en negativo. Solo te quedan ${formatCurrency(Math.max(0, remaining))} este mes.`, type: 'warning' };
 }
 
+// Specific category-tailored hints
+const CATEGORY_HINTS: Record<string, string> = {
+  supermercado: 'revisa las compras de los ultimos 7 dias. El gasto en super sube con compras no planificadas. Intenta hacer lista antes de ir.',
+  'comer fuera': 'cocina en casa al menos 4 dias por semana. Comer fuera 1 vez vale lo que 5 comidas caseras.',
+  suscripciones: 'lista todas tus suscripciones activas y cancela las que no usaste el ultimo mes. Probablemente tengas alguna olvidada.',
+  combustible: 'planifica los desplazamientos: hacer 3 recados juntos ahorra mas que ir a saco. Revisa la presion de las ruedas mensualmente.',
+  'tabaco/vaper': 'el coste anual del tabaco/vaper suele ser sorprendente. Reducirlo un 30% libera mucho dinero para tu meta.',
+  ropa: 'aplica la regla 24h: si quieres comprar algo, espera un dia. La mitad de las veces no lo compras.',
+  compras: 'revisa los pedidos de Amazon de las ultimas 4 semanas. Identifica cuantos eran realmente necesarios.',
+  ocio: 'busca planes gratis o baratos: parques, eventos publicos, museos con entrada libre.',
+  gaming: 'espera a las rebajas (Steam Sales, Black Friday). Aplazar 1 mes te puede dar el mismo juego al 50%.',
+  vending: 'lleva snacks de casa. Una bolsa de patatas en super son 1.50€, en vending 2.50€.',
+  salud: 'revisa si tu seguro cubre lo que pagas a parte. Suscribete a una mutua basica si compensa.',
+};
+
+function getCategoryHint(category: string): string {
+  const lower = category.toLowerCase();
+  for (const [key, hint] of Object.entries(CATEGORY_HINTS)) {
+    if (lower.includes(key)) return hint;
+  }
+  return `revisa los movimientos de ${category} de las ultimas 4 semanas. Identifica cuales fueron impulsivos y cuales necesarios.`;
+}
+
 function advice(data: FinData): Resp {
   const period = defaultPeriod();
   const exp = filterByPeriod(data.expenses, period);
   const byCat = groupByCategory(exp);
-  const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
 
-  if (sorted.length === 0) {
+  if (byCat.size === 0) {
     return { text: 'Registra tus gastos para que pueda darte consejos personalizados.', type: 'info' };
   }
 
-  const [topCat, topAmt] = sorted[0];
-  const totalExp = exp.reduce((s, e) => s + e.amount, 0);
-  const topPct = Math.round((topAmt / totalExp) * 100);
+  // Find biggest budget overrun (in € not %)
+  type Overrun = { category: string; spent: number; limit: number; over: number };
+  const overruns: Overrun[] = data.budgets
+    .filter((b) => b.limit > 0)
+    .map((b) => ({ category: b.category, spent: byCat.get(b.category) || 0, limit: b.limit, over: (byCat.get(b.category) || 0) - b.limit }))
+    .filter((o) => o.over > 0)
+    .sort((a, b) => b.over - a.over);
 
-  const tips: string[] = [];
+  const lines: string[] = [];
 
-  if (topPct > 40) {
-    tips.push(`Tu mayor gasto es ${topCat} (${topPct}% del total). Reducirlo un 20% te ahorraria ${formatCurrency(topAmt * 0.2)}/mes.`);
+  if (overruns.length > 0) {
+    const top = overruns[0];
+    lines.push(
+      `Tu mayor exceso esta en ${top.category}: llevas ${formatCurrency(top.spent)} de ${formatCurrency(top.limit)} de presupuesto (+${formatCurrency(top.over)}).`
+    );
+    lines.push(`Consejo: ${getCategoryHint(top.category)}`);
+
+    // Impact on goal
+    const activePhases = data.phases.filter((p) => p.status !== 'completed' && p.isActive !== false);
+    if (activePhases.length > 0) {
+      const firstGoal = activePhases[0];
+      const remaining = firstGoal.items.reduce(
+        (s, it) => s + (it.paid ? 0 : it.estimatedCost),
+        0
+      );
+      const avgSavings = getAvgMonthlySavings(data);
+      const cut = Math.min(top.over, 100); // assume realistic 100€ cut
+      if (avgSavings > 0 && remaining > 0) {
+        const baseMonths = remaining / avgSavings;
+        const newMonths = remaining / (avgSavings + cut);
+        const monthsSaved = Math.max(0, Math.round(baseMonths - newMonths));
+        if (monthsSaved >= 1) {
+          lines.push(
+            `Si recortas ${formatCurrency(cut)} aqui, llegarias a tu meta de ${firstGoal.name} ${monthsSaved} ${monthsSaved === 1 ? 'mes' : 'meses'} antes.`
+          );
+        }
+      }
+    }
+
+    if (overruns.length > 1) {
+      const others = overruns
+        .slice(1, 4)
+        .map((o) => `${o.category} (+${formatCurrency(o.over)})`)
+        .join(', ');
+      lines.push(`Tambien excedes: ${others}. Revisa si alguno se puede recortar.`);
+    }
+  } else {
+    // No overruns — give general advice based on top category
+    const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+    const [topCat, topAmt] = sorted[0];
+    const totalExp = exp.reduce((s, e) => s + e.amount, 0);
+    const topPct = Math.round((topAmt / totalExp) * 100);
+    const avg = getAvgMonthlySavings(data);
+
+    if (topPct > 40) {
+      lines.push(`Tu mayor gasto es ${topCat} (${topPct}% del total).`);
+      lines.push(`Consejo: ${getCategoryHint(topCat)}`);
+      lines.push(`Reducirlo un 20% te ahorraria ${formatCurrency(topAmt * 0.2)}/mes.`);
+    } else if (avg <= 0) {
+      lines.push('Tu ahorro mensual es negativo. Recortar gastos o buscar ingresos extra es prioritario.');
+      lines.push(`Tu mayor categoria es ${topCat} (${formatCurrency(topAmt)}).`);
+      lines.push(`Consejo: ${getCategoryHint(topCat)}`);
+    } else if (avg < data.settings.monthlyIncome * 0.1) {
+      lines.push(`Tu tasa de ahorro es baja (${formatCurrency(avg)}/mes). El objetivo ideal es al menos 20% de tus ingresos.`);
+      lines.push(`Tu mayor gasto es ${topCat}. Consejo: ${getCategoryHint(topCat)}`);
+    } else {
+      lines.push(`Vas bien. Ahorras ${formatCurrency(avg)}/mes y no excedes ningun presupuesto.`);
+      lines.push(`Tu mayor categoria es ${topCat} (${formatCurrency(topAmt)}). Mantente consistente.`);
+    }
   }
 
-  const budgetOver = data.budgets.filter((b) => {
-    if (b.limit <= 0) return false;
-    const spent = byCat.get(b.category) || 0;
-    return spent > b.limit;
-  });
-  if (budgetOver.length > 0) {
-    tips.push(`Estas excediendo ${budgetOver.length} presupuesto${budgetOver.length > 1 ? 's' : ''}: ${budgetOver.map((b) => b.category).join(', ')}.`);
+  return { text: lines.join('\n\n'), type: overruns.length > 0 ? 'warning' : 'tip' };
+}
+
+// ── Average expenses over N months ──────────────────────────────
+
+function averageExpenses(data: FinData, requestedMonths: number): Resp {
+  // Compute available months from data (distinct YYYY-MM)
+  const monthsSet = new Set<string>();
+  for (const e of data.expenses) monthsSet.add(e.date.substring(0, 7));
+  const availableMonths = monthsSet.size;
+
+  if (availableMonths === 0) {
+    return { text: 'No tienes gastos registrados aun.', type: 'info' };
   }
 
-  const avg = getAvgMonthlySavings(data);
-  if (avg <= 0) {
-    tips.push('Tu ahorro mensual es negativo. Intenta reducir gastos o buscar ingresos extra.');
-  } else if (avg < data.settings.monthlyIncome * 0.1) {
-    tips.push(`Tu tasa de ahorro es baja (${formatCurrency(avg)}/mes). El objetivo ideal es al menos un 20% de tus ingresos.`);
+  const monthsToUse = Math.min(requestedMonths, availableMonths);
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - monthsToUse);
+
+  const inRange = data.expenses.filter((e) => new Date(e.date) >= cutoff);
+  const total = inRange.reduce((s, e) => s + e.amount, 0);
+  const avgTotal = total / monthsToUse;
+
+  const byCat = groupByCategory(inRange);
+  const sorted = [...byCat.entries()]
+    .map(([cat, sum]) => [cat, sum / monthsToUse] as [string, number])
+    .sort((a, b) => b[1] - a[1]);
+
+  const lines: string[] = [];
+  if (requestedMonths > availableMonths) {
+    lines.push(`Tienes ${availableMonths} ${availableMonths === 1 ? 'mes' : 'meses'} de registros. Aqui va la media con los datos disponibles:`);
+  } else {
+    lines.push(`Media de gastos de los ultimos ${monthsToUse} ${monthsToUse === 1 ? 'mes' : 'meses'}:`);
+  }
+  lines.push(`Total: ${formatCurrency(avgTotal)}/mes`);
+  lines.push('');
+  lines.push('Por categoria:');
+  for (const [cat, amt] of sorted) {
+    lines.push(`- ${cat}: ${formatCurrency(amt)}/mes`);
   }
 
-  if (tips.length === 0) {
-    tips.push(`Vas bien. Tu mayor gasto es ${topCat} (${formatCurrency(topAmt)}). Ahorro medio: ${formatCurrency(avg)}/mes.`);
-  }
-
-  return { text: tips.join('\n\n'), type: tips.length === 1 && avg > 0 ? 'success' : 'tip' };
+  return { text: lines.join('\n'), type: 'info' };
 }
 
 function totalSpent(data: FinData, period: Period): Resp {
@@ -510,6 +616,28 @@ function processMessage(input: string, data: FinData): Resp {
   // Comparisons
   if (/compar|vs|versus|mas o menos|mas que|menos que|evolucion/.test(norm)) {
     return comparePeriods(data, norm);
+  }
+
+  // Average expenses (last N months)
+  if (/media.*gasto|gasto.*medio|gasto.*promedio|promedio.*gasto/.test(norm)) {
+    // Detect requested number of months: "últimos 3 meses", "6 meses", "doce meses"
+    const NUMBER_WORDS: Record<string, number> = {
+      un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6,
+      siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12,
+    };
+    let months = 3; // default
+    const numMatch = norm.match(/(\d+)\s*meses?/);
+    if (numMatch) {
+      months = parseInt(numMatch[1]);
+    } else {
+      for (const [word, n] of Object.entries(NUMBER_WORDS)) {
+        if (new RegExp(`\\b${word}\\s+meses?`).test(norm)) {
+          months = n;
+          break;
+        }
+      }
+    }
+    return averageExpenses(data, Math.max(1, Math.min(24, months)));
   }
 
   // Detect period and category for context-aware responses
