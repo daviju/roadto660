@@ -274,15 +274,15 @@ export function Charts() {
             Distribucion {isGlobal ? '(acumulado)' : ''}
           </h3>
           {pieData.length > 0 ? (
-            <div className="space-y-4">
-              <ResponsiveContainer width="100%" height={240}>
+            <div className="space-y-2">
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={55}
-                    outerRadius={95}
+                    innerRadius={50}
+                    outerRadius={90}
                     paddingAngle={2}
                     dataKey="value"
                     animationDuration={1200}
@@ -293,8 +293,8 @@ export function Charts() {
                   <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Custom legend with category color, name and amount — avoids label overlap */}
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 max-h-32 overflow-y-auto pr-1">
+              {/* Custom legend — pegada al donut, sin gap excesivo */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-h-28 overflow-y-auto pr-1">
                 {pieData.map((d) => {
                   const total = pieData.reduce((s, x) => s + x.value, 0);
                   const pct = total > 0 ? (d.value / total) * 100 : 0;

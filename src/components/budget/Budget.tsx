@@ -20,9 +20,10 @@ export function Budget() {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCategory.trim() || !newLimit) return;
+    if (!newCategory.trim()) return;
     if (budgets.some((b) => b.category === newCategory.trim())) return;
-    addBudget({ category: newCategory.trim(), limit: parseFloat(newLimit) });
+    const parsed = parseFloat(newLimit);
+    addBudget({ category: newCategory.trim(), limit: isNaN(parsed) ? 0 : parsed });
     setNewCategory(''); setNewLimit(''); setShowAdd(false);
   };
 
@@ -150,9 +151,13 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
           <span className="text-sm font-mono flex items-center gap-1">
             <span className={isOver ? 'text-accent-red' : isExact ? 'text-accent-green' : isWarning ? 'text-accent-amber' : 'text-th-text'}>{formatCurrency(spent)}</span>
             <span className="text-th-muted"> / </span>
-            <input type="number" step="1" min="0" value={budget.limit || ''}
-              onChange={(e) => updateBudget(budget.category, parseFloat(e.target.value) || 0)}
-              placeholder="—"
+            <input type="number" step="1" min="0" value={budget.limit}
+              onChange={(e) => {
+                const v = e.target.value;
+                const n = v === '' ? 0 : parseFloat(v);
+                updateBudget(budget.category, isNaN(n) ? 0 : n);
+              }}
+              placeholder="0"
               className="w-16 md:w-20 bg-transparent border-b border-th-border-strong text-right text-sm text-th-secondary font-mono focus:border-accent-amber focus:text-th-text focus:outline-none transition-colors placeholder:text-th-faint"
               aria-label={`Limite para ${budget.category}`} />
           </span>

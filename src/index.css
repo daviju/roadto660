@@ -4,24 +4,25 @@
 
 /* ─── Theme CSS Variables ─────────────────────────────────── */
 :root {
-  /* Dark theme (default) */
-  --bg-main: #0f1117;
-  --bg-card: #181b23;
-  --bg-card-light: #1f2330;
-  --bg-input: #0f1117;
-  --bg-hover: rgba(255, 255, 255, 0.05);
+  /* Dark theme (default) — aligned with landing palette (#050507 / #0a0a0f)
+     while keeping enough contrast for content-dense screens. */
+  --bg-main: #0a0b10;
+  --bg-card: #0f1117;
+  --bg-card-light: #161922;
+  --bg-input: #07080c;
+  --bg-hover: rgba(255, 255, 255, 0.04);
   --bg-hover-subtle: rgba(255, 255, 255, 0.02);
-  --text-primary: #ffffff;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --text-faint: #4b5563;
-  --border-color: rgba(255, 255, 255, 0.05);
-  --border-strong: rgba(255, 255, 255, 0.1);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-faint: #475569;
+  --border-color: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
-  --option-bg: #181b23;
+  --option-bg: #0f1117;
   --glow-opacity: 1;
-  --shadow-card: none;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.02) inset;
   --date-filter: invert(0.5);
 }
 

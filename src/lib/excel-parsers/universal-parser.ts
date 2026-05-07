@@ -198,8 +198,9 @@ function universalCategorize(concept: string, detail: string, type: 'income' | '
   // Suscripciones
   if (/claude\.ai|claude|anthropic|spotify|netflix|hbo|disney|amazon prime|apple\.com|patreon|blablacar|google storage|youtube premium|crunchyroll/.test(text)) return 'suscripciones';
 
-  // Cashback / Retención
-  if (/retenci[oó]n|retencion/.test(text)) return 'cashback';
+  // 'retencion' on the expense side is fiscal withholding, not cashback —
+  // do not map it to the cashback (income) category. Leave it temporal so
+  // the user can re-classify, since semantics vary by bank.
 
   // Combustible
   if (/repsol|cepsa|galp|bp |shell|gasolinera|gasolina|diesel|combustible|fuel|petro/.test(text)) return 'combustible';
@@ -242,8 +243,9 @@ export function universalParse(rows: unknown[][], mapping: ColumnMapping): Parse
 
   const dataStart = mapping.headerRow + 1;
   let totalRows = 0;
-  let latestDate = '';
-  let finalBalance: number | null = null;
+  // Track all (date, rowIdx, balance) entries; pick latest-date entry, breaking ties
+  // by row order (banks list newest first, so smaller rowIdx wins for the same date).
+  const balanceCandidates: Array<{ date: string; rowIdx: number; balance: number }> = [];
 
   for (let i = dataStart; i < rows.length; i++) {
     const row = rows[i] as unknown[] | null;
@@ -283,12 +285,11 @@ export function universalParse(rows: unknown[][], mapping: ColumnMapping): Parse
       continue;
     }
 
-    // Track the balance from the row with the latest date
-    if (balanceCell !== null && balanceCell !== undefined && isoDate >= latestDate) {
+    // Collect balance candidates (resolved after the loop)
+    if (balanceCell !== null && balanceCell !== undefined) {
       const parsedBalance = parseAmount(balanceCell);
       if (parsedBalance !== null) {
-        latestDate = isoDate;
-        finalBalance = parsedBalance;
+        balanceCandidates.push({ date: isoDate, rowIdx: i, balance: parsedBalance });
       }
     }
 
@@ -309,6 +310,20 @@ export function universalParse(rows: unknown[][], mapping: ColumnMapping): Parse
       source: 'excel_import',
       categorySlug,
     });
+  }
+
+  // Resolve the final balance: pick the row with the latest transaction date.
+  // If multiple rows share that date, prefer the one that appeared first in the
+  // file (banks typically list newest movements first, so the first row carries
+  // the most recent balance for that day).
+  let finalBalance: number | null = null;
+  if (balanceCandidates.length > 0) {
+    const best = balanceCandidates.reduce((b, c) => {
+      if (c.date > b.date) return c;
+      if (c.date === b.date && c.rowIdx < b.rowIdx) return c;
+      return b;
+    });
+    finalBalance = best.balance;
   }
 
   return { transactions, errors, totalRows, finalBalance };
