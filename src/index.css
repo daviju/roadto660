@@ -16,8 +16,8 @@
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --text-faint: #475569;
-  --border-color: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.16);
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
   --option-bg: #0f1117;
@@ -126,58 +126,70 @@ select:focus:not(:focus-visible) {
   outline: none;
 }
 
-/* ─── Card glow on hover (dark mode only) ──────────────────── */
+/* ─── Card glow on hover (dark mode only) ───────────────────────
+   On the darker (#0a0b10) background, glows need higher opacity to
+   register. We also add a subtle idle outer shadow to lift cards. */
 .card-glow {
   position: relative;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out, transform 0.2s ease-out;
+  box-shadow: var(--shadow-card),
+    0 4px 16px -8px rgba(0, 0, 0, calc(0.5 * var(--glow-opacity)));
 }
 
 .card-glow:hover {
-  border-color: rgba(167, 139, 250, calc(0.15 * var(--glow-opacity)));
+  border-color: rgba(167, 139, 250, calc(0.35 * var(--glow-opacity)));
   box-shadow: var(--shadow-card),
-    0 0 20px -5px rgba(167, 139, 250, calc(0.08 * var(--glow-opacity))),
-    0 0 60px -15px rgba(167, 139, 250, calc(0.04 * var(--glow-opacity)));
+    0 8px 24px -8px rgba(0, 0, 0, calc(0.55 * var(--glow-opacity))),
+    0 0 24px -4px rgba(167, 139, 250, calc(0.22 * var(--glow-opacity))),
+    0 0 60px -15px rgba(167, 139, 250, calc(0.12 * var(--glow-opacity)));
 }
 
 .card-glow-green {
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card),
+    0 4px 16px -8px rgba(0, 0, 0, calc(0.5 * var(--glow-opacity)));
 }
 .card-glow-green:hover {
-  border-color: rgba(52, 211, 153, calc(0.15 * var(--glow-opacity)));
+  border-color: rgba(52, 211, 153, calc(0.35 * var(--glow-opacity)));
   box-shadow: var(--shadow-card),
-    0 0 20px -5px rgba(52, 211, 153, calc(0.08 * var(--glow-opacity))),
-    0 0 60px -15px rgba(52, 211, 153, calc(0.04 * var(--glow-opacity)));
+    0 8px 24px -8px rgba(0, 0, 0, calc(0.55 * var(--glow-opacity))),
+    0 0 24px -4px rgba(52, 211, 153, calc(0.22 * var(--glow-opacity))),
+    0 0 60px -15px rgba(52, 211, 153, calc(0.12 * var(--glow-opacity)));
 }
 
 .card-glow-red {
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card),
+    0 4px 16px -8px rgba(0, 0, 0, calc(0.5 * var(--glow-opacity)));
 }
 .card-glow-red:hover {
-  border-color: rgba(248, 113, 113, calc(0.15 * var(--glow-opacity)));
+  border-color: rgba(248, 113, 113, calc(0.35 * var(--glow-opacity)));
   box-shadow: var(--shadow-card),
-    0 0 20px -5px rgba(248, 113, 113, calc(0.08 * var(--glow-opacity))),
-    0 0 60px -15px rgba(248, 113, 113, calc(0.04 * var(--glow-opacity)));
+    0 8px 24px -8px rgba(0, 0, 0, calc(0.55 * var(--glow-opacity))),
+    0 0 24px -4px rgba(248, 113, 113, calc(0.22 * var(--glow-opacity))),
+    0 0 60px -15px rgba(248, 113, 113, calc(0.12 * var(--glow-opacity)));
 }
 
 .card-glow-amber {
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card),
+    0 4px 16px -8px rgba(0, 0, 0, calc(0.5 * var(--glow-opacity)));
 }
 .card-glow-amber:hover {
-  border-color: rgba(251, 191, 36, calc(0.15 * var(--glow-opacity)));
+  border-color: rgba(251, 191, 36, calc(0.35 * var(--glow-opacity)));
   box-shadow: var(--shadow-card),
-    0 0 20px -5px rgba(251, 191, 36, calc(0.08 * var(--glow-opacity))),
-    0 0 60px -15px rgba(251, 191, 36, calc(0.04 * var(--glow-opacity)));
+    0 8px 24px -8px rgba(0, 0, 0, calc(0.55 * var(--glow-opacity))),
+    0 0 24px -4px rgba(251, 191, 36, calc(0.22 * var(--glow-opacity))),
+    0 0 60px -15px rgba(251, 191, 36, calc(0.12 * var(--glow-opacity)));
 }
 
 .card-glow-cyan {
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card),
+    0 4px 16px -8px rgba(0, 0, 0, calc(0.5 * var(--glow-opacity)));
 }
 .card-glow-cyan:hover {
-  border-color: rgba(34, 211, 238, calc(0.15 * var(--glow-opacity)));
+  border-color: rgba(34, 211, 238, calc(0.35 * var(--glow-opacity)));
   box-shadow: var(--shadow-card),
-    0 0 20px -5px rgba(34, 211, 238, calc(0.08 * var(--glow-opacity))),
-    0 0 60px -15px rgba(34, 211, 238, calc(0.04 * var(--glow-opacity)));
+    0 8px 24px -8px rgba(0, 0, 0, calc(0.55 * var(--glow-opacity))),
+    0 0 24px -4px rgba(34, 211, 238, calc(0.22 * var(--glow-opacity))),
+    0 0 60px -15px rgba(34, 211, 238, calc(0.12 * var(--glow-opacity)));
 }
 
 /* ─── Progress bar shimmer ──────────────────────────────────── */
@@ -196,10 +208,19 @@ select:focus:not(:focus-visible) {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.15),
+    rgba(255, 255, 255, 0.28),
     transparent
   );
   animation: shimmerSlide 3s ease-in-out infinite;
+}
+
+/* ─── Primary button glow (purple) ──────────────────────────── */
+.btn-glow-purple {
+  box-shadow: 0 4px 14px -2px rgba(167, 139, 250, calc(0.4 * var(--glow-opacity)));
+  transition: box-shadow 0.2s ease-out, transform 0.2s ease-out;
+}
+.btn-glow-purple:hover {
+  box-shadow: 0 6px 20px -2px rgba(167, 139, 250, calc(0.55 * var(--glow-opacity)));
 }
 
 @keyframes shimmerSlide {

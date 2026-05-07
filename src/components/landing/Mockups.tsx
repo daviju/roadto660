@@ -1,5 +1,25 @@
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { motion, animate } from 'framer-motion';
 import { FileSpreadsheet, Target, Check, BarChart3 } from 'lucide-react';
+
+// Animates a number from 0 to `target` whenever `active` becomes true.
+function useAnimatedPct(active: boolean, target: number, delay: number, duration: number) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      setVal(0);
+      return;
+    }
+    const controls = animate(0, target, {
+      duration,
+      delay,
+      ease: 'easeOut',
+      onUpdate: (v) => setVal(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [active, target, delay, duration]);
+  return val;
+}
 
 // Premium macOS-style window frame for any mockup screen.
 export function MockupFrame({ children }: { children: React.ReactNode }) {
@@ -15,6 +35,29 @@ export function MockupFrame({ children }: { children: React.ReactNode }) {
         <span className="ml-3 text-[10px] text-white/30 font-mono">roadto.app</span>
       </div>
       <div className="relative">{children}</div>
+    </div>
+  );
+}
+
+function BarRow({ label, width, active, delay }: { label: string; width: string; active: boolean; delay: number }) {
+  const targetPct = parseFloat(width); // e.g. '80%' -> 80
+  const animatedPct = useAnimatedPct(active, targetPct, delay, 1.2);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-[10px] text-[#64748b]">
+        <span>{label}</span>
+        {/* Always rendered — visible on mobile too */}
+        <span className="font-mono tabular-nums">{animatedPct}%</span>
+      </div>
+      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: 'linear-gradient(90deg, #a78bfa, #22d3ee)' }}
+          initial={{ width: '0%' }}
+          animate={active ? { width } : { width: '0%' }}
+          transition={{ duration: 1.2, delay, ease: 'easeOut' }}
+        />
+      </div>
     </div>
   );
 }
@@ -36,21 +79,7 @@ export function MockupImport({ active }: { active: boolean }) {
       </div>
       <div className="space-y-3">
         {lines.map((l, i) => (
-          <div key={l.label} className="space-y-1.5">
-            <div className="flex justify-between text-[10px] text-[#64748b]">
-              <span>{l.label}</span>
-              <span className="font-mono">{active ? '100%' : '0%'}</span>
-            </div>
-            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full rounded-full"
-                style={{ background: 'linear-gradient(90deg, #a78bfa, #22d3ee)' }}
-                initial={{ width: '0%' }}
-                animate={active ? { width: l.width } : { width: '0%' }}
-                transition={{ duration: 1.2, delay: i * 0.2, ease: 'easeOut' }}
-              />
-            </div>
-          </div>
+          <BarRow key={l.label} label={l.label} width={l.width} active={active} delay={i * 0.2} />
         ))}
       </div>
       <motion.div

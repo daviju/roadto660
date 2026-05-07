@@ -427,26 +427,19 @@ export function Sidebar() {
         aria-label="Navegacion movil"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="flex items-stretch h-14">
+        <div className="flex items-stretch h-16 px-1">
           {BOTTOM_NAV.map(({ page, label, icon: Icon }) => {
             const isActive = currentPage === page;
             return (
               <button
                 key={page}
                 onClick={() => setPage(page)}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${
-                  isActive ? 'text-accent-purple' : 'text-th-muted'
+                className={`flex-1 flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-xl transition-colors duration-200 ${
+                  isActive ? 'bg-accent-purple/15 text-accent-purple' : 'text-th-muted'
                 }`}
                 aria-label={label}
                 aria-current={isActive ? 'page' : undefined}
               >
-                {isActive && (
-                  <motion.div
-                    className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-accent-purple"
-                    layoutId="mobile-nav-indicator"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
                 <span className={`text-[10px] leading-none ${isActive ? 'font-semibold' : 'font-normal'}`}>{label}</span>
               </button>
@@ -456,19 +449,12 @@ export function Sidebar() {
           {/* "Más" button */}
           <button
             onClick={() => setDrawerOpen(true)}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${
-              drawerActive ? 'text-accent-purple' : 'text-th-muted'
+            className={`flex-1 flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-xl transition-colors duration-200 ${
+              drawerActive ? 'bg-accent-purple/15 text-accent-purple' : 'text-th-muted'
             }`}
             aria-label="Mas opciones"
             aria-expanded={drawerOpen}
           >
-            {drawerActive && !drawerOpen && (
-              <motion.div
-                className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-accent-purple"
-                layoutId="mobile-nav-indicator"
-                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              />
-            )}
             <MoreHorizontal size={20} strokeWidth={drawerActive ? 2.5 : 2} aria-hidden="true" />
             <span className={`text-[10px] leading-none ${drawerActive ? 'font-semibold' : 'font-normal'}`}>Mas</span>
           </button>

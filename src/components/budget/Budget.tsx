@@ -107,10 +107,17 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
   updateBudget: (cat: string, limit: number) => void; deleteBudget: (cat: string) => void; settings: any;
 }) {
   const spent = getCategoryExpenses(expenses, currentMonth, budget.category, settings.payDay, settings.cycleMode);
-  const pct = budget.limit > 0 ? spent / budget.limit : 0;
-  const isOver = budget.limit > 0 && pct > 1;
-  const isExact = budget.limit > 0 && Math.abs(spent - budget.limit) < 0.01;
-  const isWarning = budget.limit > 0 && pct >= 0.8 && !isOver && !isExact;
+  // limit === 0 is a valid "spend zero" target: any spending is over-budget,
+  // 0€ spending is "meta cumplida". We compute pct/flags accordingly.
+  const isZeroTarget = budget.limit === 0;
+  const pct = isZeroTarget
+    ? (spent > 0 ? 1 : 0)
+    : (budget.limit > 0 ? spent / budget.limit : 0);
+  const isOver = isZeroTarget ? spent > 0 : (budget.limit > 0 && pct > 1);
+  const isExact = isZeroTarget
+    ? spent === 0
+    : (budget.limit > 0 && Math.abs(spent - budget.limit) < 0.01);
+  const isWarning = !isZeroTarget && budget.limit > 0 && pct >= 0.8 && !isOver && !isExact;
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-30px' });
 
@@ -173,8 +180,13 @@ function BudgetItem({ budget, index, expenses, currentMonth, updateBudget, delet
           initial={{ width: 0 }} animate={isInView ? { width: `${Math.min(100, pct * 100)}%` } : { width: 0 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 + index * 0.05 }} />
       </div>
-      {budget.limit === 0 ? (
-        <p className="mt-2 text-xs text-th-faint italic">Sin presupuesto — toca el campo para asignar</p>
+      {isZeroTarget ? (
+        <div className="flex justify-between mt-2 text-xs">
+          <span className={spent > 0 ? 'text-accent-red' : 'text-accent-green'}>
+            {spent > 0 ? `Excedido (${formatCurrency(spent)} gastados)` : 'Cumpliendo objetivo (0€)'}
+          </span>
+          <span className="text-th-muted">Objetivo: 0€ este mes</span>
+        </div>
       ) : (
         <div className="flex justify-between mt-2 text-xs text-th-muted">
           <span>{Math.round(pct * 100)}% usado</span>

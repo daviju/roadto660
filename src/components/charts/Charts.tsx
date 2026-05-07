@@ -249,7 +249,15 @@ export function Charts() {
         )}
       </motion.div>
 
-      <motion.div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6" variants={staggerContainer}>
+      {/* When many categories, stack vertically so the donut keeps its circular shape */}
+      <motion.div
+        className={
+          pieData.length > 10
+            ? 'flex flex-col gap-4 md:gap-6'
+            : 'grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6'
+        }
+        variants={staggerContainer}
+      >
         <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow">
           <h3 className="text-sm font-semibold text-th-text mb-4">
             Gastos por categoria {isGlobal ? '(acumulado)' : ''}
@@ -269,32 +277,34 @@ export function Charts() {
           ) : <EmptyChart message="Sin gastos en este periodo" sub="Anade gastos para ver el desglose" />}
         </motion.div>
 
-        <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow">
+        <motion.div variants={fadeUp} className="bg-th-card rounded-xl p-4 md:p-5 border border-th-border card-glow flex flex-col">
           <h3 className="text-sm font-semibold text-th-text mb-4">
             Distribucion {isGlobal ? '(acumulado)' : ''}
           </h3>
           {pieData.length > 0 ? (
-            <div className="space-y-2">
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                    animationDuration={1200}
-                    stroke="none"
-                  >
-                    {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                  <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="space-y-2 flex-1 flex flex-col">
+              <div className="flex items-center justify-center" style={{ minHeight: 240 }}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={2}
+                      dataKey="value"
+                      animationDuration={1200}
+                      stroke="none"
+                    >
+                      {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip {...tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
               {/* Custom legend — pegada al donut, sin gap excesivo */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-h-28 overflow-y-auto pr-1">
+              <div className={`grid ${pieData.length > 10 ? 'grid-cols-3 md:grid-cols-4' : 'grid-cols-2'} gap-x-4 gap-y-1 max-h-32 overflow-y-auto pr-1`}>
                 {pieData.map((d) => {
                   const total = pieData.reduce((s, x) => s + x.value, 0);
                   const pct = total > 0 ? (d.value / total) * 100 : 0;

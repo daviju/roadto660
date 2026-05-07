@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { motion, AnimatePresence, useInView } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { MockupFrame, MockupImport, MockupGoal, MockupProjection } from './Mockups';
 
 interface Step {
@@ -29,19 +29,33 @@ const STEPS: Step[] = [
   },
 ];
 
+function MockupForStep({ step }: { step: number }) {
+  if (step === 0) return <MockupImport active />;
+  if (step === 1) return <MockupGoal active />;
+  return <MockupProjection active />;
+}
+
 export function ProductSection() {
-  const step1Ref = useRef<HTMLDivElement>(null);
-  const step2Ref = useRef<HTMLDivElement>(null);
-  const step3Ref = useRef<HTMLDivElement>(null);
+  // Track scroll progress through the desktop step container — the active step
+  // is then derived from progress, eliminating gaps between useInView regions.
+  const stepsRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: stepsRef,
+    offset: ['start start', 'end end'],
+  });
 
-  const inView1 = useInView(step1Ref, { margin: '-45% 0px -45% 0px', amount: 'some' });
-  const inView2 = useInView(step2Ref, { margin: '-45% 0px -45% 0px', amount: 'some' });
-  const inView3 = useInView(step3Ref, { margin: '-45% 0px -45% 0px', amount: 'some' });
+  // Map progress thirds to step index
+  const activeStepMV = useTransform(scrollYProgress, (v) => {
+    if (v < 1 / 3) return 0;
+    if (v < 2 / 3) return 1;
+    return 2;
+  });
 
-  // Active step: later steps win when overlapping detection zones.
-  const activeIndex = inView3 ? 2 : inView2 ? 1 : 0;
-  const isActive = [inView1, inView2, inView3];
-  const refs = [step1Ref, step2Ref, step3Ref];
+  const [currentStep, setCurrentStep] = useState(0);
+  useEffect(() => {
+    setCurrentStep(activeStepMV.get());
+    return activeStepMV.on('change', (v) => setCurrentStep(v));
+  }, [activeStepMV]);
 
   return (
     <section className="relative px-6">
@@ -65,37 +79,33 @@ export function ProductSection() {
           </p>
         </motion.div>
 
-        {/* Desktop: sticky mockup + scroll steps. Two columns of equal natural height. */}
+        {/* Desktop: sticky mockup + scroll steps. */}
         <div className="hidden lg:grid grid-cols-2 gap-16 pb-32">
           {/* Sticky column — mockup centered vertically while user scrolls steps. */}
           <div className="relative">
             <div className="sticky top-1/2 -translate-y-1/2">
               <MockupFrame>
-                {/* Bug 6: scale + fade between steps so the change is noticeable */}
+                {/* Cinematic transition: scale + slight Y + blur, with smooth easing */}
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={activeIndex}
-                    initial={{ scale: 0.85, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 1.08, opacity: 0 }}
-                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    key={currentStep}
+                    initial={{ opacity: 0, scale: 0.92, y: 20, filter: 'blur(8px)' }}
+                    animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, scale: 1.05, y: -20, filter: 'blur(8px)' }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                   >
-                    {activeIndex === 0 && <MockupImport active={inView1} />}
-                    {activeIndex === 1 && <MockupGoal active={inView2} />}
-                    {activeIndex === 2 && <MockupProjection active={inView3} />}
+                    <MockupForStep step={currentStep} />
                   </motion.div>
                 </AnimatePresence>
               </MockupFrame>
             </div>
           </div>
 
-          {/* Steps: top padding so first text-block sits below the heading and matches
-              mockup vertical centre; bottom padding so last mockup scrolls down with last step. */}
-          <div className="space-y-[60vh] pt-[20vh] pb-[30vh]">
+          {/* Steps column — scrollYProgress is calculated against this ref. */}
+          <div ref={stepsRef} className="space-y-[60vh] pt-[20vh] pb-[30vh]">
             {STEPS.map((s, i) => (
               <motion.div
                 key={s.title}
-                ref={refs[i]}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-30%' }}
@@ -103,7 +113,7 @@ export function ProductSection() {
                 className="space-y-4"
               >
                 <motion.span
-                  animate={isActive[i] ? { scale: 1, opacity: 1 } : { scale: 0.92, opacity: 0.5 }}
+                  animate={currentStep === i ? { scale: 1, opacity: 1 } : { scale: 0.92, opacity: 0.5 }}
                   transition={{ duration: 0.3, ease: 'easeOut' }}
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/30"
                 >
