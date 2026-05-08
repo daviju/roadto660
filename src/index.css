@@ -223,6 +223,19 @@ select:focus:not(:focus-visible) {
   box-shadow: 0 6px 20px -2px rgba(167, 139, 250, calc(0.55 * var(--glow-opacity)));
 }
 
+/* ─── Mockup idle float (landing) ───────────────────────────── */
+@keyframes mockupFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-6px); }
+}
+.mockup-float {
+  animation: mockupFloat 6s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mockup-float { animation: none; }
+}
+
 @keyframes shimmerSlide {
   0%   { transform: translateX(-200%); }
   50%  { transform: translateX(300%); }

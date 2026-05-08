@@ -37,11 +37,13 @@ function MockupForStep({ step }: { step: number }) {
 
 export function ProductSection() {
   // Track scroll progress through the desktop step container — the active step
-  // is then derived from progress, eliminating gaps between useInView regions.
+  // is derived from progress, eliminating gaps between useInView regions.
+  // Offset starts at 0.3 / ends at 0.7 so the mockup activates only when the
+  // step text is fully on screen and stays through to the last step's exit.
   const stepsRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
     target: stepsRef,
-    offset: ['start start', 'end end'],
+    offset: ['start 0.3', 'end 0.7'],
   });
 
   // Map progress thirds to step index
@@ -66,7 +68,7 @@ export function ProductSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-100px' }}
           transition={{ duration: 0.6 }}
-          className="text-center pt-32 md:pt-40 mb-16 md:mb-24"
+          className="text-center pt-32 md:pt-40 mb-16 md:mb-[20vh]"
         >
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-[#f1f5f9]">
             De extracto a plan{' '}
@@ -83,26 +85,37 @@ export function ProductSection() {
         <div className="hidden lg:grid grid-cols-2 gap-16 pb-32">
           {/* Sticky column — mockup centered vertically while user scrolls steps. */}
           <div className="relative">
-            <div className="sticky top-1/2 -translate-y-1/2">
-              <MockupFrame>
-                {/* Cinematic transition: scale + slight Y + blur, with smooth easing */}
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={currentStep}
-                    initial={{ opacity: 0, scale: 0.92, y: 20, filter: 'blur(8px)' }}
-                    animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, scale: 1.05, y: -20, filter: 'blur(8px)' }}
-                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    <MockupForStep step={currentStep} />
-                  </motion.div>
-                </AnimatePresence>
-              </MockupFrame>
+            <div className="sticky top-1/2 -translate-y-1/2" style={{ perspective: 1000 }}>
+              {/* Entrance: 3D tilt from below into place */}
+              <motion.div
+                initial={{ opacity: 0, y: 60, rotateX: 15, scale: 0.9 }}
+                whileInView={{ opacity: 1, y: 0, rotateX: 0, scale: 1 }}
+                viewport={{ once: true, margin: '-30%' }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {/* Idle float — subtle 6s loop. Inner element so it doesn't fight the entrance transform. */}
+                <div className="mockup-float">
+                  <MockupFrame>
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={currentStep}
+                        initial={{ opacity: 0, scale: 0.92, filter: 'blur(8px)' }}
+                        animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, scale: 1.05, filter: 'blur(6px)' }}
+                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                      >
+                        <MockupForStep step={currentStep} />
+                      </motion.div>
+                    </AnimatePresence>
+                  </MockupFrame>
+                </div>
+              </motion.div>
             </div>
           </div>
 
-          {/* Steps column — scrollYProgress is calculated against this ref. */}
-          <div ref={stepsRef} className="space-y-[60vh] pt-[20vh] pb-[30vh]">
+          {/* Steps column — scrollYProgress is calculated against this ref.
+              Generous top/bottom padding so mockup tracks step text precisely. */}
+          <div ref={stepsRef} className="space-y-[60vh] pt-[40vh] pb-[50vh]">
             {STEPS.map((s, i) => (
               <motion.div
                 key={s.title}
